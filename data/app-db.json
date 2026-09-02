@@ -1,0 +1,24 @@
+{
+  "organizations": [
+    {
+      "id": "org_kora_1",
+      "name": "Kora Works Ltd",
+      "industry": "Operations & Services",
+      "timezone": "Africa/Lagos",
+      "currency": "NGN",
+      "createdAt": "2026-08-30T16:04:21.617Z"
+    }
+  ],
+  "users": [
+    {
+      "id": "user_demo_1",
+      "name": "John Akinrinde",
+      "email": "demo@kora.ng",
+      "passwordHash": "$2b$10$SiA5dtzw7J/qlL5tG1uC3.hGrDwe4O203JN6weOAzPvy7DGddVueC",
+      "role": "owner",
+      "organizationId": "org_kora_1",
+      "createdAt": "2026-08-30T16:04:21.702Z"
+    }
+  ],
+  "onboarding": []
+}
