@@ -445,7 +445,12 @@ export default function Home() {
 
               <nav className="flex flex-wrap items-center gap-2">
                 {navItems.map((item) => (
-                  <button key={item} type="button" className="rounded-full border border-white/10 bg-slate-950/50 px-3 py-1.5 text-xs font-medium text-slate-200 transition hover:border-violet-400/60 hover:bg-violet-500/10">
+                  <button 
+                    key={item} 
+                    type="button" 
+                    onClick={() => {}}
+                    className="rounded-full border border-white/10 bg-slate-950/50 px-3 py-1.5 text-xs font-medium text-slate-200 transition hover:border-violet-400/60 hover:bg-violet-500/10 cursor-pointer"
+                  >
                     {item}
                   </button>
                 ))}

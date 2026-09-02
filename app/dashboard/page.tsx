@@ -82,7 +82,7 @@ export default function DashboardPage() {
             <p className="text-[0.68rem] uppercase tracking-[0.24em] text-violet-300/80">Daily command center</p>
             <h2 className="mt-3 text-3xl font-semibold tracking-tight text-white sm:text-5xl">{user.name.split(" ")[0]}'s workspace</h2>
             <p className="mt-4 max-w-xl text-base leading-7 text-slate-300">
-              {workspace?.organization?.name || "Your workspace"} is connected to real operational signals and the Kora learning loop is already tracking the business context.
+              Intelligent insights from your business operations, real-time analytics, and AI-powered recommendations to help you make better decisions faster.
             </p>
 
             <div className="mt-8 grid gap-4 md:grid-cols-3">
