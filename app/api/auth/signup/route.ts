@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { createUser, findUserByEmail, readDatabase } from "@/lib/store";
+import { createOrganization, createUser, findUserByEmail } from "@/lib/store";
 import { setSessionCookie } from "@/lib/session";
 
 const signupSchema = z.object({
@@ -32,15 +32,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Account already exists." }, { status: 409 });
     }
 
-    const db = await readDatabase();
-    const organization = db.organizations[0] ?? null;
+    const organization = await createOrganization({
+      name: `${name.trim()}'s workspace`,
+      industry: "Other",
+      timezone: "Africa/Lagos",
+      currency: "NGN",
+    });
     const passwordHash = await bcrypt.hash(password, 10);
     const user = await createUser({
       name,
       email: normalizedEmail,
       passwordHash,
       role: "owner",
-      organizationId: organization?.id ?? "org_kora_1",
+      organizationId: organization.id,
     });
 
     const response = NextResponse.json({

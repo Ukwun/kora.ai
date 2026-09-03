@@ -1,10 +1,14 @@
 @import "tailwindcss";
 
 :root {
-  --background: #07070f;
-  --foreground: #f5f3ff;
-  --panel: rgba(16, 15, 25, 0.8);
+  --background: #050509;
+  --foreground: #f8f7ff;
+  --panel: #101019;
   --panel-border: rgba(255, 255, 255, 0.1);
+  --kora-purple: #8b5cf6;
+  --kora-violet: #a855f7;
+  --kora-hot: #c026d3;
+  --kora-muted: #8b899a;
 }
 
 @theme inline {
@@ -26,12 +30,14 @@ body {
   margin: 0;
   min-height: 100vh;
   background:
-    radial-gradient(circle at top left, rgba(168, 85, 247, 0.2), transparent 30%),
-    radial-gradient(circle at top right, rgba(59, 130, 246, 0.14), transparent 26%),
+    radial-gradient(circle at 12% 0%, rgba(139, 92, 246, 0.1), transparent 24%),
+    linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px),
     var(--background);
+  background-size: auto, 42px 42px, 42px 42px, auto;
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-  letter-spacing: -0.02em;
+  font-family: Georgia, "Times New Roman", serif;
+  letter-spacing: 0;
 }
 
 button,
@@ -52,11 +58,79 @@ button {
   align-items: center;
   justify-content: center;
   border-radius: 0.9rem;
-  background: linear-gradient(135deg, #a855f7 0%, #7c3aed 45%, #c084fc 100%);
-  box-shadow: 0 20px 35px rgba(168, 85, 247, 0.4);
+  background: var(--kora-purple);
+  box-shadow: 0 0 32px rgba(139, 92, 246, 0.35);
   color: white;
   font-size: 1rem;
   font-weight: 800;
+}
+
+.kora-core-stage {
+  position: relative;
+  display: flex;
+  height: 15rem;
+  width: min(100%, 32rem);
+  align-items: center;
+  justify-content: center;
+  margin: 0 0 2.5rem 1rem;
+}
+
+.kora-core {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  height: 7rem;
+  width: 7rem;
+  place-items: center;
+  border: 1px solid rgba(216, 180, 254, 0.8);
+  border-radius: 50%;
+  background: #11101a;
+  box-shadow: 0 0 0 0.6rem rgba(139, 92, 246, 0.08), 0 0 70px rgba(168, 85, 247, 0.45), inset 0 0 30px rgba(192, 38, 211, 0.3);
+  animation: coreBreathe 4s ease-in-out infinite;
+}
+
+.kora-core span {
+  color: #f8f7ff;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 3.2rem;
+  font-weight: 700;
+}
+
+.kora-core-orbit {
+  position: absolute;
+  height: 10rem;
+  width: 22rem;
+  border: 1px solid rgba(168, 85, 247, 0.38);
+  border-radius: 50%;
+  transform: rotate(-18deg);
+}
+
+.kora-core-orbit-one { animation: orbitOne 9s linear infinite; }
+.kora-core-orbit-two { height: 7rem; width: 18rem; border-color: rgba(217, 70, 239, 0.3); transform: rotate(38deg); animation: orbitTwo 7s linear infinite reverse; }
+
+.kora-core-label {
+  position: absolute;
+  bottom: 0;
+  color: var(--kora-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+@keyframes coreBreathe {
+  0%, 100% { transform: scale(0.98); box-shadow: 0 0 0 0.6rem rgba(139, 92, 246, 0.08), 0 0 55px rgba(168, 85, 247, 0.35), inset 0 0 30px rgba(192, 38, 211, 0.25); }
+  50% { transform: scale(1.04); box-shadow: 0 0 0 1rem rgba(139, 92, 246, 0.1), 0 0 85px rgba(168, 85, 247, 0.55), inset 0 0 35px rgba(192, 38, 211, 0.4); }
+}
+
+@keyframes orbitOne { to { transform: rotate(342deg); } }
+@keyframes orbitTwo { to { transform: rotate(398deg); } }
+
+@media (max-width: 640px) {
+  .kora-core-stage { height: 12rem; margin-left: 0; }
+  .kora-core { height: 5.5rem; width: 5.5rem; }
+  .kora-core span { font-size: 2.5rem; }
+  .kora-core-orbit { width: 17rem; }
 }
 
 .intro-shell {

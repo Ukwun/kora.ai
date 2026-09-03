@@ -1,5 +1,12 @@
 import { NextRequest } from "next/server";
-import type { BusinessUser } from "./store";
+
+export type OrganizationUser = {
+  id: string;
+  name?: string;
+  email?: string;
+  role: string;
+  organizationId: string;
+};
 
 // Rate limiting storage (in production, use Redis)
 const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
@@ -103,14 +110,14 @@ export function getUserAgent(request: NextRequest): string {
 
 // Authorization check - verify user has access to organization
 export function canAccessOrganization(
-  user: BusinessUser,
+  user: OrganizationUser,
   organizationId: string
 ): boolean {
   return user.organizationId === organizationId;
 }
 
 // Authorization check - verify user has required role
-export function hasRole(user: BusinessUser, requiredRoles: string[]): boolean {
+export function hasRole(user: OrganizationUser, requiredRoles: string[]): boolean {
   return requiredRoles.includes(user.role);
 }
 
@@ -145,7 +152,7 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
   ],
 };
 
-export function canPerformAction(user: BusinessUser, action: string): boolean {
+export function canPerformAction(user: OrganizationUser, action: string): boolean {
   const permissions = ROLE_PERMISSIONS[user.role] || [];
   return permissions.includes(action) || permissions.includes("all_data_access");
 }

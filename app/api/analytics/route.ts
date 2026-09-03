@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/session";
 import { findUserByEmail } from "@/lib/store";
+import { getBusinessProfile } from "@/lib/business-memory";
 import {
   checkRateLimit,
   getClientIP,
@@ -94,7 +95,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // Generate sample analytics
+    const profile = await getBusinessProfile(user.id, user.organizationId);
+    const metrics = profile?.metrics ?? [];
+    const revenueMetrics = metrics.filter((metric) => metric.name.toLowerCase().includes("revenue"));
+    const currentRevenue = Number(revenueMetrics.at(-1)?.value) || 0;
+    const previousRevenue = Number(revenueMetrics.at(-2)?.value) || 0;
+    const revenueGrowth = previousRevenue > 0
+      ? Math.round(((currentRevenue - previousRevenue) / previousRevenue) * 100)
+      : 0;
+    const connectedIntegrations = profile?.integrations.filter((integration) => integration.connected).length ?? 0;
+    const customerCount = profile?.customersPerMonth ?? 0;
+
     const analytics = {
       user: {
         id: user.id,
@@ -105,49 +116,41 @@ export async function GET(request: NextRequest) {
       organizationId: user.organizationId,
       periods: {
         week: {
-          revenue: Math.floor(Math.random() * 5000000) + 1000000,
-          customers: Math.floor(Math.random() * 50) + 10,
-          tasks: Math.floor(Math.random() * 100) + 20,
-          invoices: Math.floor(Math.random() * 30) + 5,
-          payments: Math.floor(Math.random() * 20) + 3,
+          revenue: currentRevenue,
+          customers: customerCount,
+          tasks: 0,
+          invoices: 0,
+          payments: 0,
         },
         month: {
-          revenue: Math.floor(Math.random() * 20000000) + 5000000,
-          customers: Math.floor(Math.random() * 200) + 50,
-          tasks: Math.floor(Math.random() * 400) + 100,
-          invoices: Math.floor(Math.random() * 120) + 30,
-          payments: Math.floor(Math.random() * 80) + 20,
+          revenue: currentRevenue,
+          customers: customerCount,
+          tasks: 0,
+          invoices: 0,
+          payments: 0,
         },
         year: {
-          revenue: Math.floor(Math.random() * 100000000) + 20000000,
-          customers: Math.floor(Math.random() * 1000) + 200,
-          tasks: Math.floor(Math.random() * 2000) + 500,
-          invoices: Math.floor(Math.random() * 600) + 150,
-          payments: Math.floor(Math.random() * 400) + 100,
+          revenue: currentRevenue,
+          customers: customerCount,
+          tasks: 0,
+          invoices: 0,
+          payments: 0,
         },
       },
       trends: {
-        revenueGrowth: Math.floor(Math.random() * 40) + 10,
-        customerGrowth: Math.floor(Math.random() * 30) + 5,
-        taskEfficiency: Math.floor(Math.random() * 40) + 60,
-        paymentHealth: Math.floor(Math.random() * 30) + 70,
+        revenueGrowth,
+        customerGrowth: 0,
+        taskEfficiency: 0,
+        paymentHealth: 0,
       },
       topMetrics: {
-        avgInvoiceValue: Math.floor(Math.random() * 500000) + 100000,
-        paymentDaysOverdue: Math.floor(Math.random() * 20) + 2,
-        customerRetention: Math.floor(Math.random() * 30) + 70,
-        teamProductivity: Math.floor(Math.random() * 30) + 70,
+        avgInvoiceValue: 0,
+        paymentDaysOverdue: 0,
+        customerRetention: 0,
+        teamProductivity: 0,
       },
-      bottlenecks: [
-        "Quote-to-invoice time averaging 5 days",
-        "Payment collection delays from 2 key accounts",
-        "Task approval bottleneck in finance team",
-      ],
-      opportunities: [
-        "Upsell premium services to top 20 customers",
-        "Automate recurring invoice generation",
-        "Implement automated payment reminders",
-      ],
+      bottlenecks: profile?.mainChallenge ? [`Primary focus: ${profile.mainChallenge.replace(/_/g, " ")}`] : [],
+      opportunities: connectedIntegrations === 0 ? ["Connect a business tool to start collecting live activity."] : [],
     };
 
     // Log successful analytics access

@@ -1,5 +1,7 @@
 import type { BusinessUser, Organization } from "./store";
 
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+
 export type AIMessageRole = "user" | "assistant" | "system";
 
 export type AIMessage = {
