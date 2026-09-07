@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { postgresEnabled, query } from "./db";
 
 export type OrganizationUser = {
   id: string;
@@ -167,10 +168,27 @@ export async function logAudit(
     timestamp: new Date().toISOString(),
   };
 
-  // In production, store in database or dedicated logging service
-  console.log(
-    `[AUDIT] ${auditLog.action} | User: ${auditLog.userId} | Org: ${auditLog.organizationId} | Status: ${auditLog.status}`
-  );
+  if (postgresEnabled) {
+    await query(
+      `INSERT INTO audit_logs (id, organization_id, user_id, action, resource, resource_id, status, details, ip_address, user_agent, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      [
+        auditLog.id,
+        auditLog.organizationId,
+        auditLog.userId,
+        auditLog.action,
+        auditLog.resource,
+        auditLog.resourceId ?? null,
+        auditLog.status,
+        auditLog.details ?? {},
+        auditLog.ipAddress ?? null,
+        auditLog.userAgent ?? null,
+        auditLog.timestamp,
+      ]
+    );
+  } else if (process.env.NODE_ENV !== "production") {
+    console.log(`[AUDIT] ${auditLog.action} | User: ${auditLog.userId} | Org: ${auditLog.organizationId} | Status: ${auditLog.status}`);
+  }
 
   return auditLog;
 }

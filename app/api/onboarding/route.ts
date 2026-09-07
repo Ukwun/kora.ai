@@ -3,7 +3,7 @@ import { getSessionFromRequest } from "@/lib/session";
 import {
   getOrCreateBusinessProfile,
   updateOnboardingStep,
-  recordIntegrationConnection,
+  recordIntegrationInterest,
   getBusinessProfile,
 } from "@/lib/business-memory";
 import {
@@ -179,18 +179,18 @@ export async function POST(request: NextRequest) {
         );
         nextStep = "integrations";
         message =
-          "Perfect! Now let's connect your tools so I can see everything happening in your business. Which would you like to connect?";
+          "Perfect. Select the tools you want to connect next. Kora will only mark a tool connected after you approve its provider authorization.";
         break;
 
       case "integrations":
-        // Record connected integrations
+        // Record integration interest. A provider is only marked connected after its OAuth or API authorization succeeds.
         const integrations = Array.isArray(cleanData.integrations)
           ? cleanData.integrations
           : [cleanData.integrations];
 
         for (const integration of integrations) {
           if (integration) {
-            await recordIntegrationConnection(
+            await recordIntegrationInterest(
               session.organizationId,
               session.id,
               String(integration)

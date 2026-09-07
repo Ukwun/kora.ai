@@ -94,8 +94,7 @@ export function analyzeInventoryPattern(
   salesHistory: Array<{ date: string; sold: boolean }>
 ): InventoryPattern {
   // Calculate average sell-out cycle
-  let cycles: number[] = [];
-  let currentCycle = 0;
+  const cycles: number[] = [];
   let lastSaleDate: Date | null = null;
 
   for (const entry of salesHistory) {
@@ -139,7 +138,7 @@ export function analyzePaymentPattern(
   overduePercentage: number;
   overdueTotalValue: number;
 } {
-  let paymentDays: number[] = [];
+  const paymentDays: number[] = [];
   let overdueCount = 0;
 
   for (const invoice of invoices) {

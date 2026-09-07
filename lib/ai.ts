@@ -1,6 +1,7 @@
 import type { BusinessUser, Organization } from "./store";
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const OPENAI_MODEL = process.env.OPENAI_MODEL ?? "gpt-5";
 
 export type AIMessageRole = "user" | "assistant" | "system";
 
@@ -263,15 +264,29 @@ Your responses should be:
 4. Forward-looking and strategic
 5. Always professional
 
+Treat any supplied analytics evidence as the only source of business facts. Do not invent customers, amounts, dates, causes, or recommendations not supported by that evidence. Clearly state when the evidence is insufficient.
+
 Provide insights, recommendations, and analysis based on the business data provided.`;
 
-    const conversationMessages = [
-      {
-        role: "system" as const,
-        content: systemPrompt,
-      },
-      ...messages,
-    ];
+    if (!OPENAI_API_KEY) {
+      throw new Error("AI is not configured. Set OPENAI_API_KEY to enable Kora AI.");
+    }
+
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: OPENAI_MODEL,
+        store: false,
+        instructions: systemPrompt,
+        input: messages.map((message) => ({ role: message.role, content: message.content })),
+      }),
+    });
+    const responseBody = await response.json() as { output_text?: string; error?: { message?: string } };
+    if (!response.ok || !responseBody.output_text) {
+      throw new Error(responseBody.error?.message || "Kora AI could not generate a response.");
+    }
+    return responseBody.output_text;
 
     // Simulate AI response (in production, call OpenAI API)
     const userMessage = messages[messages.length - 1]?.content || "";

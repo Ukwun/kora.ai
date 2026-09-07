@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 import bcrypt from "bcryptjs";
 import type { BusinessProfile } from "./business-profile";
+import { postgresEnabled, query, withTransaction } from "./db";
 
 export type UserRole = "owner" | "admin" | "manager" | "employee";
 
@@ -154,6 +155,23 @@ function assertProductionDatabase() {
   }
 }
 
+function defaultDatabaseForDevelopment(): AppDatabase {
+  return {
+    organizations: defaultOrganizations,
+    users: defaultUsers,
+    onboarding: [],
+    profiles: [],
+    customers: [],
+    tasks: [],
+    invoices: [],
+    payments: [],
+    activityEvents: [],
+    memberships: [],
+    passwordResetTokens: [],
+    billingSubscriptions: [],
+  };
+}
+
 const defaultOrganizations: Organization[] = [
   {
     id: "org_kora_1",
@@ -177,23 +195,11 @@ const defaultUsers: BusinessUser[] = [
   },
 ];
 
-const defaultDatabase: AppDatabase = {
-  organizations: defaultOrganizations,
-  users: defaultUsers,
-  onboarding: [],
-  profiles: [],
-  customers: [],
-  tasks: [],
-  invoices: [],
-  payments: [],
-  activityEvents: [],
-  memberships: [],
-  passwordResetTokens: [],
-  billingSubscriptions: [],
-};
+const defaultDatabase = defaultDatabaseForDevelopment();
 
 export async function ensureDatabase() {
   assertProductionDatabase();
+  if (postgresEnabled) return;
   await fs.mkdir(dataDir, { recursive: true });
 
   try {
@@ -204,6 +210,7 @@ export async function ensureDatabase() {
 }
 
 export async function readDatabase(): Promise<AppDatabase> {
+  if (postgresEnabled) return readPostgresDatabase();
   await ensureDatabase();
 
   const raw = await fs.readFile(dbPath, "utf-8");
@@ -230,10 +237,63 @@ export async function readDatabase(): Promise<AppDatabase> {
 }
 
 export async function writeDatabase(data: AppDatabase) {
+  if (postgresEnabled) return writePostgresDatabase(data);
   await ensureDatabase();
   const temporaryPath = `${dbPath}.${process.pid}.${Date.now()}.tmp`;
   await fs.writeFile(temporaryPath, JSON.stringify(data, null, 2), "utf-8");
   await fs.rename(temporaryPath, dbPath);
+}
+
+async function readPostgresDatabase(): Promise<AppDatabase> {
+  const [organizations, users, onboarding, profiles, customers, tasks, invoices, payments, activityEvents, memberships, passwordResetTokens, billingSubscriptions] = await Promise.all([
+    query<Organization>("SELECT id, name, industry, timezone, currency, created_at AS \"createdAt\" FROM organizations"),
+    query<BusinessUser>("SELECT id, name, email, password_hash AS \"passwordHash\", role, organization_id AS \"organizationId\", created_at AS \"createdAt\" FROM users"),
+    query<OnboardingState>("SELECT user_id AS \"userId\", business_name AS \"businessName\", industry, goals, tools, challenges, created_at AS \"createdAt\" FROM onboarding_states"),
+    query<{ id: string; userId: string; organizationId: string; data: Partial<BusinessProfile>; createdAt: string; updatedAt: string }>("SELECT id, user_id AS \"userId\", organization_id AS \"organizationId\", data, created_at AS \"createdAt\", updated_at AS \"updatedAt\" FROM business_profiles"),
+    query<Customer>("SELECT id, organization_id AS \"organizationId\", name, email, phone, status, notes, created_by AS \"createdBy\", created_at AS \"createdAt\", updated_at AS \"updatedAt\" FROM customers"),
+    query<Task>("SELECT id, organization_id AS \"organizationId\", title, description, status, priority, assigned_to AS \"assignedTo\", created_by AS \"createdBy\", due_at AS \"dueAt\", created_at AS \"createdAt\", updated_at AS \"updatedAt\" FROM tasks"),
+    query<Invoice>("SELECT id, organization_id AS \"organizationId\", customer_id AS \"customerId\", number, amount::float8 AS amount, currency, status, due_at AS \"dueAt\", created_by AS \"createdBy\", created_at AS \"createdAt\", updated_at AS \"updatedAt\" FROM invoices"),
+    query<Payment>("SELECT id, organization_id AS \"organizationId\", invoice_id AS \"invoiceId\", customer_id AS \"customerId\", amount::float8 AS amount, currency, provider, provider_reference AS \"providerReference\", status, received_at AS \"receivedAt\", created_at AS \"createdAt\" FROM payments"),
+    query<ActivityEvent>("SELECT id, organization_id AS \"organizationId\", actor_user_id AS \"actorUserId\", type, entity_type AS \"entityType\", entity_id AS \"entityId\", payload, created_at AS \"createdAt\" FROM activity_events"),
+    query<Membership>("SELECT id, organization_id AS \"organizationId\", user_id AS \"userId\", email, role, status, token, COALESCE(invited_at, joined_at, NOW()) AS \"createdAt\" FROM memberships"),
+    query<PasswordResetToken>("SELECT token_hash AS \"tokenHash\", user_id AS \"userId\", expires_at AS \"expiresAt\", used_at AS \"usedAt\" FROM password_reset_tokens"),
+    query<BillingSubscription>("SELECT organization_id AS \"organizationId\", plan, status, provider, provider_customer_id AS \"providerCustomerId\", provider_subscription_id AS \"providerSubscriptionId\", current_period_end AS \"currentPeriodEnd\", seat_limit AS \"seatLimit\", updated_at AS \"updatedAt\" FROM billing_subscriptions"),
+  ]);
+
+  return {
+    organizations: organizations.rows,
+    users: users.rows,
+    onboarding: onboarding.rows,
+    profiles: profiles.rows.map(({ data, ...row }) => ({ ...row, ...data }) as BusinessProfile),
+    customers: customers.rows,
+    tasks: tasks.rows,
+    invoices: invoices.rows,
+    payments: payments.rows,
+    activityEvents: activityEvents.rows,
+    memberships: memberships.rows,
+    passwordResetTokens: passwordResetTokens.rows,
+    billingSubscriptions: billingSubscriptions.rows,
+  };
+}
+
+async function writePostgresDatabase(data: AppDatabase) {
+  await withTransaction(async (client) => {
+    for (const organization of data.organizations) await client.query("INSERT INTO organizations (id, name, industry, timezone, currency, created_at) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name, industry=EXCLUDED.industry, timezone=EXCLUDED.timezone, currency=EXCLUDED.currency", [organization.id, organization.name, organization.industry, organization.timezone, organization.currency, organization.createdAt]);
+    for (const user of data.users) await client.query("INSERT INTO users (id, organization_id, name, email, password_hash, role, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (id) DO UPDATE SET organization_id=EXCLUDED.organization_id, name=EXCLUDED.name, email=EXCLUDED.email, password_hash=EXCLUDED.password_hash, role=EXCLUDED.role", [user.id, user.organizationId, user.name, user.email, user.passwordHash, user.role, user.createdAt]);
+    for (const profile of data.profiles) {
+      const { id, userId, organizationId, createdAt, updatedAt, ...profileData } = profile;
+      await client.query("INSERT INTO business_profiles (id, user_id, organization_id, data, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data, updated_at=EXCLUDED.updated_at", [id, userId, organizationId, profileData, createdAt, updatedAt]);
+    }
+    for (const entry of data.onboarding) await client.query("INSERT INTO onboarding_states (user_id, business_name, industry, goals, tools, challenges, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (user_id) DO UPDATE SET business_name=EXCLUDED.business_name, industry=EXCLUDED.industry, goals=EXCLUDED.goals, tools=EXCLUDED.tools, challenges=EXCLUDED.challenges", [entry.userId, entry.businessName, entry.industry, entry.goals, entry.tools, entry.challenges, entry.createdAt]);
+    for (const customer of data.customers) await client.query("INSERT INTO customers (id, organization_id, name, email, phone, status, notes, created_by, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name, email=EXCLUDED.email, phone=EXCLUDED.phone, status=EXCLUDED.status, notes=EXCLUDED.notes, updated_at=EXCLUDED.updated_at", [customer.id, customer.organizationId, customer.name, customer.email ?? null, customer.phone ?? null, customer.status, customer.notes ?? null, customer.createdBy, customer.createdAt, customer.updatedAt]);
+    for (const task of data.tasks) await client.query("INSERT INTO tasks (id, organization_id, title, description, status, priority, assigned_to, created_by, due_at, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, description=EXCLUDED.description, status=EXCLUDED.status, priority=EXCLUDED.priority, assigned_to=EXCLUDED.assigned_to, due_at=EXCLUDED.due_at, updated_at=EXCLUDED.updated_at", [task.id, task.organizationId, task.title, task.description ?? null, task.status, task.priority, task.assignedTo ?? null, task.createdBy, task.dueAt ?? null, task.createdAt, task.updatedAt]);
+    for (const invoice of data.invoices) await client.query("INSERT INTO invoices (id, organization_id, customer_id, number, amount, currency, status, due_at, created_by, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (id) DO UPDATE SET customer_id=EXCLUDED.customer_id, number=EXCLUDED.number, amount=EXCLUDED.amount, currency=EXCLUDED.currency, status=EXCLUDED.status, due_at=EXCLUDED.due_at, updated_at=EXCLUDED.updated_at", [invoice.id, invoice.organizationId, invoice.customerId ?? null, invoice.number, invoice.amount, invoice.currency, invoice.status, invoice.dueAt ?? null, invoice.createdBy, invoice.createdAt, invoice.updatedAt]);
+    for (const payment of data.payments) await client.query("INSERT INTO payments (id, organization_id, invoice_id, customer_id, amount, currency, provider, provider_reference, status, received_at, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (id) DO UPDATE SET invoice_id=EXCLUDED.invoice_id, customer_id=EXCLUDED.customer_id, amount=EXCLUDED.amount, currency=EXCLUDED.currency, provider=EXCLUDED.provider, provider_reference=EXCLUDED.provider_reference, status=EXCLUDED.status, received_at=EXCLUDED.received_at", [payment.id, payment.organizationId, payment.invoiceId ?? null, payment.customerId ?? null, payment.amount, payment.currency, payment.provider, payment.providerReference ?? null, payment.status, payment.receivedAt ?? null, payment.createdAt]);
+    for (const event of data.activityEvents) await client.query("INSERT INTO activity_events (id, organization_id, actor_user_id, type, entity_type, entity_id, payload, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (id) DO UPDATE SET payload=EXCLUDED.payload", [event.id, event.organizationId, event.actorUserId, event.type, event.entityType, event.entityId ?? null, event.payload, event.createdAt]);
+    for (const membership of data.memberships) await client.query("INSERT INTO memberships (id, organization_id, user_id, email, role, status, invited_at) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (id) DO UPDATE SET user_id=EXCLUDED.user_id, email=EXCLUDED.email, role=EXCLUDED.role, status=EXCLUDED.status, invited_at=EXCLUDED.invited_at", [membership.id, membership.organizationId, membership.userId ?? null, membership.email, membership.role, membership.status, membership.createdAt]);
+    for (const token of data.passwordResetTokens) await client.query("INSERT INTO password_reset_tokens (token_hash, user_id, expires_at, used_at) VALUES ($1,$2,$3,$4) ON CONFLICT (token_hash) DO UPDATE SET expires_at=EXCLUDED.expires_at, used_at=EXCLUDED.used_at", [token.tokenHash, token.userId, token.expiresAt, token.usedAt ?? null]);
+    for (const subscription of data.billingSubscriptions) await client.query("INSERT INTO billing_subscriptions (organization_id, plan, status, provider, provider_customer_id, provider_subscription_id, current_period_end, seat_limit, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (organization_id) DO UPDATE SET plan=EXCLUDED.plan, status=EXCLUDED.status, provider=EXCLUDED.provider, provider_customer_id=EXCLUDED.provider_customer_id, provider_subscription_id=EXCLUDED.provider_subscription_id, current_period_end=EXCLUDED.current_period_end, seat_limit=EXCLUDED.seat_limit, updated_at=EXCLUDED.updated_at", [subscription.organizationId, subscription.plan, subscription.status, subscription.provider ?? null, subscription.providerCustomerId ?? null, subscription.providerSubscriptionId ?? null, subscription.currentPeriodEnd ?? null, subscription.seatLimit, subscription.updatedAt]);
+  });
 }
 
 export async function findUserByEmail(email: string) {

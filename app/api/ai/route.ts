@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/session";
 import { findUserByEmail, findOrganizationById } from "@/lib/store";
 import { AIEngine, type AIContext, type AIMessage } from "@/lib/ai";
+import { answerBusinessQuestion } from "@/lib/ai-intelligence";
 import {
   checkRateLimit,
   getClientIP,
@@ -84,14 +85,14 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    let { action, messages, context } = body as {
+    const { action: requestedAction, messages, context } = body as {
       action: "recommendations" | "insights" | "analyze" | "chat";
       messages?: AIMessage[];
       context?: Partial<AIContext>;
     };
 
     // Sanitize action input
-    action = sanitizeInput(String(action), 50) as any;
+    const action = sanitizeInput(String(requestedAction), 50);
 
     const user = await findUserByEmail(session.email);
     if (!user) {
@@ -147,8 +148,33 @@ export async function POST(request: NextRequest) {
         if (!messages || messages.length === 0) {
           return NextResponse.json({ error: "No messages provided" }, { status: 400 });
         }
-        const response = await aiEngine.chat(messages, fullContext);
-        result = { message: response };
+        const question = messages.filter((message) => message.role === "user").at(-1)?.content?.trim();
+        if (!question || question.length > 2_000) {
+          return NextResponse.json({ error: "Enter a business question of up to 2,000 characters." }, { status: 400 });
+        }
+        const intelligence = await answerBusinessQuestion(session.organizationId, question);
+        if (intelligence.intent === "unsupported") {
+          result = intelligence;
+          break;
+        }
+        const evidence = JSON.stringify({
+          generatedAt: intelligence.generatedAt,
+          candidates: intelligence.candidates,
+          dataNotice: intelligence.dataNotice,
+        });
+        const groundedContext: AIContext = {
+          ...fullContext,
+          recentActivity: [],
+          memoryNodes: [],
+          metrics: { revenue: 0, customers: 0, tasks: 0, retention: 0 },
+        };
+        const response = await aiEngine.chat([
+          {
+            role: "user",
+            content: `Question: ${question}\n\nConfirmed Kora analytics evidence (use only these facts; do not invent customers, values, or causes):\n${evidence}`,
+          },
+        ], groundedContext);
+        result = { ...intelligence, message: response };
         break;
 
       default:

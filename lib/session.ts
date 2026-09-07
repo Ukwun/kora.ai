@@ -9,7 +9,11 @@ export type SessionUser = {
 };
 
 const cookieName = "kora_session";
-const secret = (process.env.SESSION_SECRET || "kora-session-secret-dev").padEnd(32, "0");
+const configuredSecret = process.env.SESSION_SECRET;
+if (process.env.NODE_ENV === "production" && (!configuredSecret || configuredSecret.length < 32)) {
+  throw new Error("SESSION_SECRET must be at least 32 characters in production");
+}
+const secret = (configuredSecret || "kora-session-secret-dev").padEnd(32, "0");
 
 async function signValue(value: string) {
   const textEncoder = new TextEncoder();

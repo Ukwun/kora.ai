@@ -47,7 +47,7 @@ export type TenantSnapshot = {
   integrations: TenantIntegration[];
 };
 
-const defaultIntegrations: TenantIntegration[] = [
+export const defaultIntegrations: TenantIntegration[] = [
   { type: "gmail", connected: true, connectedAt: new Date().toISOString(), metadata: { source: "gmail-connector" } },
   { type: "whatsapp", connected: false, metadata: { source: "manual" } },
   { type: "calendar", connected: true, connectedAt: new Date().toISOString(), metadata: { source: "google-calendar" } },
@@ -55,7 +55,7 @@ const defaultIntegrations: TenantIntegration[] = [
   { type: "flutterwave", connected: true, connectedAt: new Date().toISOString(), metadata: { source: "flutterwave" } },
 ];
 
-const defaultMemberships: TenantMembership[] = [
+export const defaultMemberships: TenantMembership[] = [
   {
     id: "member_1",
     userId: "user_demo_1",
@@ -84,7 +84,8 @@ const defaultMemberships: TenantMembership[] = [
 
 export async function getTenantSnapshot(organizationId: string): Promise<TenantSnapshot> {
   const database = await readDatabase();
-  const plan: TenantPlan = "growth";
+  const subscription = database.billingSubscriptions.find((entry) => entry.organizationId === organizationId);
+  const plan: TenantPlan = subscription?.plan ?? "starter";
   const summary = getPlanSummary(plan);
   const memberships: TenantMembership[] = database.users
     .filter((user) => user.organizationId === organizationId)
@@ -107,9 +108,9 @@ export async function getTenantSnapshot(organizationId: string): Promise<TenantS
     billing: {
       plan,
       monthlyPrice: summary.monthlyPrice,
-      status: "active",
+      status: subscription?.status ?? "trial",
       seats: summary.seats,
-      nextBillingDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      nextBillingDate: subscription?.currentPeriodEnd ?? "",
     },
     memberships,
     integrations,

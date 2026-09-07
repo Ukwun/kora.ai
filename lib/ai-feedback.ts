@@ -120,7 +120,7 @@ async function updatePreferencesFromFeedback(
   // Extract recommendation type from ID (in production, look up actual recommendation)
   const recType = recommendationId.split("_")[1] || "general";
 
-  let preferences = preferenceStore.get(key) || [];
+  const preferences = preferenceStore.get(key) || [];
   let pref = preferences.find((p) => p.recommendationType === recType);
 
   if (!pref) {

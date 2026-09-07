@@ -63,7 +63,8 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    let { action, recipients, subject, body: emailBody, type } = body;
+    const { recipients, type } = body;
+    let { action, subject, body: emailBody } = body;
 
     // Sanitize inputs
     subject = sanitizeInput(String(subject), 200);

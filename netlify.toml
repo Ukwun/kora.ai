@@ -1,5 +1,5 @@
 [build]
-  command = "npm run build"
+  command = "next build"
   publish = ".next"
   functions = ".netlify/functions"
 
@@ -7,11 +7,6 @@
   NODE_VERSION = "20"
   NEXT_TELEMETRY_DISABLED = "1"
   NPM_FLAGS = "--legacy-peer-deps"
-
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
 
 [[headers]]
   for = "/*"

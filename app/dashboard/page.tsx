@@ -38,6 +38,10 @@ export default function DashboardPage() {
   const [action, setAction] = useState<"customer" | "task" | "invoice" | null>(null);
   const [form, setForm] = useState({ name: "", email: "", title: "", number: "", amount: "" });
   const [actionStatus, setActionStatus] = useState("");
+  const [checkinOpen, setCheckinOpen] = useState(false);
+  const [checkinType, setCheckinType] = useState("nothing_significant");
+  const [checkinNote, setCheckinNote] = useState("");
+  const [checkinStatus, setCheckinStatus] = useState("");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
@@ -122,6 +126,25 @@ export default function DashboardPage() {
     }
   };
 
+  const submitCheckin = async () => {
+    setSaving(true);
+    setCheckinStatus("");
+    try {
+      const response = await fetch("/api/checkins", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: checkinType, note: checkinNote }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Unable to save your update.");
+      setCheckinStatus("Saved to Kora's business memory.");
+      setCheckinNote("");
+      const profileResponse = await fetch("/api/onboarding", { cache: "no-store" });
+      const profileData = await profileResponse.json();
+      if (profileResponse.ok) setProfile(profileData.profile);
+    } catch (error) {
+      setCheckinStatus(error instanceof Error ? error.message : "Unable to save your update.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#07070f] flex items-center justify-center">
@@ -163,6 +186,10 @@ export default function DashboardPage() {
               <div className="text-3xl font-bold text-violet-400">{health}%</div>
               <div className="text-sm text-slate-400">Business Health</div>
             </div>
+          </div>
+          <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-violet-400/20 bg-violet-500/10 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div><p className="font-medium text-white">Good morning, {user.name.split(" ")[0]}.</p><p className="mt-1 text-sm text-slate-300">Did anything important happen yesterday? A small update keeps Kora&apos;s operating memory current.</p></div>
+            <button type="button" onClick={() => { setCheckinOpen(true); setCheckinStatus(""); }} className="shrink-0 rounded-lg bg-violet-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-400">Add update</button>
           </div>
         </div>
       </div>
@@ -206,15 +233,15 @@ export default function DashboardPage() {
               </div>
               <div className="flex justify-between items-center pb-4 border-b border-white/10">
                 <span className="text-slate-400">Seats</span>
-                <span className="text-white font-semibold">{tenant?.billing?.seats ?? 12}</span>
+                <span className="text-white font-semibold">{tenant?.billing?.seats ?? "-"}</span>
               </div>
               <div className="flex justify-between items-center pb-4 border-b border-white/10">
                 <span className="text-slate-400">Monthly spend</span>
-                <span className="text-white font-semibold">₦{(tenant?.billing?.monthlyPrice ?? 34000).toLocaleString()}</span>
+                <span className="text-white font-semibold">{tenant?.billing ? `₦${tenant.billing.monthlyPrice.toLocaleString()}` : "-"}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-slate-400">Org ID</span>
-                <span className="text-white font-semibold text-xs">{tenant?.organizationId ?? "org_kora_1"}</span>
+                <span className="text-white font-semibold text-xs">{tenant?.organizationId ?? "-"}</span>
               </div>
             </div>
           </div>
@@ -269,24 +296,24 @@ export default function DashboardPage() {
             <span>✨</span> AI Insights
           </h2>
           <div className="grid md:grid-cols-3 gap-4">
-            <div className="p-4 rounded-lg bg-slate-950/50 border border-white/5 hover:border-violet-400/30 transition-all cursor-pointer group">
+            <button type="button" onClick={() => openAction("customer")} className="p-4 rounded-lg bg-slate-950/50 border border-white/5 hover:border-violet-400/30 transition-all cursor-pointer group text-left">
               <div className="text-2xl mb-2">🎯</div>
               <p className="text-sm text-slate-300 group-hover:text-violet-300 transition-colors">
                 Your profile is ready. I&apos;m learning about your business operations.
               </p>
-            </div>
-            <div className="p-4 rounded-lg bg-slate-950/50 border border-white/5 hover:border-violet-400/30 transition-all cursor-pointer group">
+            </button>
+            <button type="button" onClick={() => router.push("/onboarding")} className="p-4 rounded-lg bg-slate-950/50 border border-white/5 hover:border-violet-400/30 transition-all cursor-pointer group text-left">
               <div className="text-2xl mb-2">📈</div>
               <p className="text-sm text-slate-300 group-hover:text-violet-300 transition-colors">
                 Connect your email, calendar, and payment tools for real-time insights.
               </p>
-            </div>
-            <div className="p-4 rounded-lg bg-slate-950/50 border border-white/5 hover:border-violet-400/30 transition-all cursor-pointer group">
+            </button>
+            <button type="button" onClick={() => openAction("task")} className="p-4 rounded-lg bg-slate-950/50 border border-white/5 hover:border-violet-400/30 transition-all cursor-pointer group text-left">
               <div className="text-2xl mb-2">📊</div>
               <p className="text-sm text-slate-300 group-hover:text-violet-300 transition-colors">
                 Every invoice, customer, and task you create teaches me about your business.
               </p>
-            </div>
+            </button>
           </div>
         </div>
 
@@ -370,6 +397,14 @@ export default function DashboardPage() {
               {actionStatus && <p className="text-sm text-violet-200">{actionStatus}</p>}
               <button type="button" disabled={saving} onClick={submitAction} className="w-full rounded-lg bg-violet-500 px-4 py-3 font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50">{saving ? "Saving..." : `Create ${action}`}</button>
             </div>
+          </div>
+        </div>
+      )}
+      {checkinOpen && (
+        <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-labelledby="checkin-title">
+          <div className="w-full max-w-md rounded-2xl border border-violet-500/30 bg-[#101019] p-6 shadow-2xl">
+            <div className="mb-5 flex items-center justify-between"><div><h2 id="checkin-title" className="text-xl font-semibold">Keep Kora current</h2><p className="mt-1 text-sm text-slate-400">This becomes a verified note in your business memory.</p></div><button type="button" onClick={() => setCheckinOpen(false)} className="text-slate-400 hover:text-white" aria-label="Close">×</button></div>
+            <div className="space-y-3"><select value={checkinType} onChange={(event) => setCheckinType(event.target.value)} className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-white"><option value="hired">We hired someone</option><option value="customer_cancelled">A customer cancelled</option><option value="product_launched">We launched a product or service</option><option value="payment_received">We received a significant payment</option><option value="prices_changed">We changed prices</option><option value="nothing_significant">Nothing significant</option><option value="other">Something else</option></select><textarea value={checkinNote} onChange={(event) => setCheckinNote(event.target.value)} maxLength={500} placeholder="Add context (optional)" className="min-h-28 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-white" />{checkinStatus && <p className="text-sm text-violet-200">{checkinStatus}</p>}<button type="button" disabled={saving} onClick={submitCheckin} className="w-full rounded-lg bg-violet-500 px-4 py-3 font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50">{saving ? "Saving…" : "Save update"}</button></div>
           </div>
         </div>
       )}

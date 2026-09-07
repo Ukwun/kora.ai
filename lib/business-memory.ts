@@ -243,7 +243,7 @@ export async function recordIntegrationConnection(
     existingIntegration.connectedAt = new Date().toISOString();
   } else {
     profile.integrations.push({
-      type: integrationType as any,
+      type: integrationType as BusinessProfile["integrations"][number]["type"],
       connected: true,
       connectedAt: new Date().toISOString(),
     });
@@ -261,6 +261,25 @@ export async function recordIntegrationConnection(
     source: "manual",
   });
 
+  return profile;
+}
+
+export async function recordIntegrationInterest(
+  organizationId: string,
+  userId: string,
+  integrationType: string
+): Promise<BusinessProfile> {
+  const profile = await getOrCreateBusinessProfile(userId, organizationId);
+  const existingIntegration = profile.integrations.find((integration) => integration.type === integrationType);
+  if (!existingIntegration) {
+    profile.integrations.push({
+      type: integrationType as BusinessProfile["integrations"][number]["type"],
+      connected: false,
+      metadata: { requestedAt: new Date().toISOString() },
+    });
+  }
+  profile.updatedAt = new Date().toISOString();
+  await saveBusinessProfile(profile);
   return profile;
 }
 

@@ -4,6 +4,7 @@ import { getSessionFromRequest } from "@/lib/session";
 import { createInvoice, listOrganizationRecords } from "@/lib/operations";
 import type { Invoice } from "@/lib/store";
 import { canPerformAction } from "@/lib/security";
+import { recordUserAction } from "@/lib/business-memory";
 
 const schema = z.object({ number: z.string().trim().min(2).max(40), amount: z.coerce.number().positive(), customerId: z.string().optional(), dueAt: z.string().datetime().optional() });
 
@@ -21,5 +22,6 @@ export async function POST(request: NextRequest) {
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Enter a valid invoice number and amount." }, { status: 400 });
   const invoice = await createInvoice({ ...parsed.data, currency: "NGN", status: "draft", organizationId: session.organizationId, createdBy: session.id });
+  await recordUserAction(session.organizationId, session.id, "invoice_created", { invoiceId: invoice.id, amount: invoice.amount });
   return NextResponse.json({ success: true, data: invoice }, { status: 201 });
 }

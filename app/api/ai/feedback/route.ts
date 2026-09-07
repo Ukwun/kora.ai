@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/session";
-import { recordFeedback, getFeedbackStats, shouldShowRecommendation } from "@/lib/ai-feedback";
+import { recordFeedback, getFeedbackStats } from "@/lib/ai-feedback";
 import {
   checkRateLimit,
   getClientIP,

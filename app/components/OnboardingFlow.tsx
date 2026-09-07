@@ -1,16 +1,16 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 export default function OnboardingFlow() {
+  const router = useRouter();
   const [currentStep, setCurrentStep] = useState<string>("business_type");
   const [progress, setProgress] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(
     "Let's get your business running.\n\nThis will only take about five minutes."
   );
-
-  const [formData, setFormData] = useState<Record<string, unknown>>({});
 
   const businessTypes = [
     { id: "restaurant", label: "Restaurant" },
@@ -76,7 +76,7 @@ export default function OnboardingFlow() {
 
         if (result.nextStep === "complete") {
           // Onboarding complete
-          window.location.href = "/dashboard";
+          router.push("/dashboard");
         }
       } else {
         alert("Error: " + (result.error || "Unknown error"));

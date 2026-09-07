@@ -4,6 +4,7 @@ import { getSessionFromRequest } from "@/lib/session";
 import { createPayment, listOrganizationRecords } from "@/lib/operations";
 import type { Payment } from "@/lib/store";
 import { canPerformAction } from "@/lib/security";
+import { recordUserAction } from "@/lib/business-memory";
 
 const schema = z.object({ amount: z.coerce.number().positive(), invoiceId: z.string().optional(), customerId: z.string().optional(), provider: z.string().trim().min(2).max(40), providerReference: z.string().trim().max(120).optional() });
 
@@ -21,5 +22,6 @@ export async function POST(request: NextRequest) {
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Enter a valid payment amount and provider." }, { status: 400 });
   const payment = await createPayment({ ...parsed.data, currency: "NGN", status: "received", receivedAt: new Date().toISOString(), organizationId: session.organizationId });
+  await recordUserAction(session.organizationId, session.id, "payment_received", { paymentId: payment.id, amount: payment.amount });
   return NextResponse.json({ success: true, data: payment }, { status: 201 });
 }
