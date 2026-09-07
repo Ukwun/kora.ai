@@ -6,7 +6,7 @@
 [build.environment]
   NODE_VERSION = "20"
   NEXT_TELEMETRY_DISABLED = "1"
-  NPM_FLAGS = "--legacy-peer-deps"
+NPM_FLAGS = "--legacy-peer-deps --include=dev"
 
 [[headers]]
   for = "/*"
