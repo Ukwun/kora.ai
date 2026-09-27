@@ -151,6 +151,11 @@ export async function POST(request: NextRequest) {
         const evidence = JSON.stringify({
           generatedAt: intelligence.generatedAt,
           candidates: intelligence.candidates,
+          memoryRecords: intelligence.memoryRecords?.map(({ record, matchedTerms }) => ({
+            record: { id: record.id, entityType: record.entityType, title: record.title, summary: record.summary, data: record.data, source: record.source, verificationStatus: record.verificationStatus, updatedAt: record.updatedAt },
+            matchedTerms,
+          })),
+          sources: intelligence.sources,
           dataNotice: intelligence.dataNotice,
         });
         const groundedContext = {

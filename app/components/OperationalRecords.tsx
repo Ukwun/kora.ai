@@ -56,3 +56,30 @@ export function WeeklyBusinessReport() {
   ] as const;
   return <section className="rounded-2xl border border-white/10 bg-white/[0.025] p-5 sm:p-6"><div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-end"><div><p className="text-xs uppercase tracking-[0.18em] text-violet-300">Weekly business review</p><h2 className="mt-1 text-xl font-semibold">{report.period.label}</h2></div><p className="text-xs text-slate-500">{new Date(report.period.start).toLocaleDateString()} – {new Date(report.period.end).toLocaleDateString()}</p></div><div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">{cards.map(([label, value]) => <article key={label} className="rounded-xl border border-white/5 bg-black/20 p-4"><p className="text-xs text-slate-500">{label}</p><p className="mt-2 text-sm font-semibold text-slate-100">{value}</p></article>)}</div><p className="mt-4 text-xs leading-5 text-slate-500">{report.caveat} Delivery through PDF, email, or WhatsApp is not configured yet.</p></section>;
 }
+
+export function BusinessProfileEditor({ canEdit }: { canEdit: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [profile, setProfile] = useState<Record<string, unknown>>({});
+  const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState("");
+  async function openEditor() {
+    setNotice("");
+    const response = await fetch("/api/onboarding", { cache: "no-store" });
+    const result = await response.json();
+    if (!response.ok) { setNotice(result.error || "Unable to load business profile."); return; }
+    setProfile(result.profile ?? {}); setOpen(true);
+  }
+  const text = (key: string) => Array.isArray(profile[key]) ? (profile[key] as string[]).join(", ") : String(profile[key] ?? "");
+  const update = (key: string, value: string) => setProfile((old) => ({ ...old, [key]: value }));
+  async function save() {
+    setSaving(true); setNotice("");
+    const list = (key: string) => text(key).split(",").map((value) => value.trim()).filter(Boolean);
+    const draft: Record<string, unknown> = { businessName: text("businessName"), industry: text("industry"), type: text("type"), country: text("country"), currency: text("currency").toUpperCase(), timezone: text("timezone"), employees: text("employees") ? Number(profile.employees) : undefined, customersPerMonth: text("customersPerMonth") ? Number(profile.customersPerMonth) : undefined, monthlyRevenueRange: text("monthlyRevenueRange"), offerings: list("offerings"), goals: list("goals"), existingSoftware: list("existingSoftware"), communicationChannels: list("communicationChannels"), preferredPaymentMethods: list("preferredPaymentMethods"), workingHours: text("workingHours"), reportingPreferences: list("reportingPreferences") };
+    const body = Object.fromEntries(Object.entries(draft).filter(([, value]) => value !== "" && value !== undefined));
+    try { const response = await fetch("/api/onboarding", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); const result = await response.json(); if (!response.ok) throw new Error(result.error || "Unable to save profile."); setProfile(result.profile); setNotice("Business profile updated. Kora will use this as your latest owner-provided context."); }
+    catch (error) { setNotice(error instanceof Error ? error.message : "Unable to save profile."); }
+    finally { setSaving(false); }
+  }
+  const input = (key: string, label: string, type = "text") => <label key={key} className="block text-xs text-slate-400">{label}<input type={type} value={text(key)} onChange={(event) => update(key, event.target.value)} className="mt-1 w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white outline-none focus:border-violet-400" /></label>;
+  return <><button type="button" disabled={!canEdit} onClick={() => void openEditor()} className="mt-4 rounded-lg border border-white/10 px-3 py-2 text-xs text-slate-300 transition hover:border-violet-300/40 hover:text-white disabled:opacity-40">Edit business profile</button>{notice && !open && <p role="status" className="mt-2 text-xs text-amber-200">{notice}</p>}{open && <div className="fixed inset-0 z-50 overflow-y-auto bg-black/75 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Edit business profile"><section className="mx-auto my-8 w-full max-w-3xl rounded-2xl border border-violet-300/20 bg-[#11111c] p-5 sm:p-7"><div className="flex items-start justify-between"><div><p className="text-xs uppercase tracking-widest text-violet-300">Workspace settings</p><h2 className="mt-2 text-2xl font-semibold">Business profile</h2><p className="mt-2 text-sm text-slate-400">These are owner-provided estimates. Update them whenever they change.</p></div><button type="button" aria-label="Close editor" onClick={() => setOpen(false)} className="rounded-lg px-3 py-2 text-slate-400 hover:bg-white/10">×</button></div><div className="mt-5 grid gap-3 sm:grid-cols-2">{input("businessName", "Business name")}{input("industry", "Industry")}{input("country", "Country")}{input("currency", "Currency code")}{input("timezone", "Timezone")}{input("employees", "Employees", "number")}{input("customersPerMonth", "Approximate monthly customers", "number")}{input("monthlyRevenueRange", "Monthly revenue range code")}{input("offerings", "Products or services (comma separated)")}{input("goals", "Business goals (comma separated)")}{input("existingSoftware", "Current tools (comma separated)")}{input("communicationChannels", "Preferred communication channels (comma separated)")}{input("preferredPaymentMethods", "Payment methods (comma separated)")}{input("reportingPreferences", "Reporting preferences (comma separated)")}{input("workingHours", "Working hours")}</div>{notice && <p role="status" className="mt-4 rounded-lg bg-violet-500/10 px-3 py-2 text-sm text-violet-100">{notice}</p>}<button type="button" disabled={saving} onClick={() => void save()} className="mt-5 w-full rounded-xl bg-violet-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50">{saving ? "Saving…" : "Save profile"}</button></section></div>}</>;
+}

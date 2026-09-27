@@ -49,35 +49,3 @@ export function verifyPassword(password: string, hash: string) {
 export function createId(prefix: string) {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`;
 }
-
-export const demoAccounts: AuthAccount[] = [
-  {
-    id: "user_demo_1",
-    name: "John Akinrinde",
-    email: "demo@kora.ng",
-    passwordHash: bcrypt.hashSync("demo1234", 10),
-    organizationId: "org_kora_1",
-    role: "owner",
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "user_demo_2",
-    name: "Amina Okafor",
-    email: "admin@kora.ng",
-    passwordHash: bcrypt.hashSync("kora@2026", 10),
-    organizationId: "org_kora_1",
-    role: "admin",
-    createdAt: new Date().toISOString(),
-  },
-];
-
-export const demoOrganizations: OrganizationRecord[] = [
-  {
-    id: "org_kora_1",
-    name: "Kora Works Ltd",
-    industry: "Agency",
-    timezone: "Africa/Lagos",
-    currency: "NGN",
-    createdAt: new Date().toISOString(),
-  },
-];

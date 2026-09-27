@@ -28,7 +28,7 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
   const database = await readDatabase();
   const user = database.users.find((entry) => entry.id === id && entry.organizationId === session.organizationId);
   if (!user || user.id === session.id || user.role === "owner") return NextResponse.json({ error: "Member not found or cannot be removed" }, { status: 404 });
-  user.organizationId = "revoked";
+  user.accountStatus = "suspended";
   const membership = database.memberships.find((entry) => entry.userId === id && entry.organizationId === session.organizationId);
   if (membership) membership.status = "revoked";
   await writeDatabase(database);

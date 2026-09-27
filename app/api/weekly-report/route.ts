@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/session";
-import { findUserByEmail, readDatabase } from "@/lib/store";
+import { findUserByEmail, type Customer, type Invoice, type Task } from "@/lib/store";
+import { listOrganizationRecords } from "@/lib/operations";
 import { canPerformAction } from "@/lib/security";
 import { isFirebaseAdminConfigured } from "@/lib/firebase-admin";
 import { listBusinessMemoryRecords } from "@/lib/business-memory-records";
@@ -14,12 +15,16 @@ export async function GET(request: NextRequest) {
 
   const now = new Date();
   const start = new Date(now); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
-  const db = await readDatabase();
   const orgId = user.organizationId;
-  const scoped = <T extends { organizationId: string; createdBy?: string }>(rows: T[]) => rows.filter((row) => row.organizationId === orgId && (canPerformAction(user, "view_team_data") || canPerformAction(user, "all_data_access") || row.createdBy === user.id));
-  const invoices = scoped(db.invoices);
-  const customers = scoped(db.customers);
-  const tasks = scoped(db.tasks);
+  const [allInvoices, allCustomers, allTasks] = await Promise.all([
+    listOrganizationRecords<Invoice>("invoices", orgId),
+    listOrganizationRecords<Customer>("customers", orgId),
+    listOrganizationRecords<Task>("tasks", orgId),
+  ]);
+  const teamAccess = canPerformAction(user, "view_team_data") || canPerformAction(user, "all_data_access");
+  const invoices = allInvoices.filter((row) => teamAccess || row.createdBy === user.id);
+  const customers = allCustomers.filter((row) => teamAccess || row.createdBy === user.id);
+  const tasks = allTasks.filter((row) => teamAccess || row.createdBy === user.id || row.assignedTo === user.id);
   const thisWeek = (value: string) => new Date(value) >= start && new Date(value) <= now;
   const memory = isFirebaseAdminConfigured() ? await listBusinessMemoryRecords(orgId, 500) : [];
   const records = memory.filter((record) => canPerformAction(user, "view_team_data") || canPerformAction(user, "all_data_access") || record.createdBy === user.id);

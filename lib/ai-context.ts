@@ -1,17 +1,23 @@
 import type { BusinessUser, Organization } from "./store";
-import { readDatabase } from "./store";
+import { findBusinessProfile, type Customer, type Invoice, type Task } from "./store";
+import { listOrganizationActivity, listOrganizationRecords } from "./operations";
 import { canPerformAction } from "./security";
 import type { AIContext } from "./ai";
 
 /** Build model context only from records the signed-in user is authorized to see. */
 export async function buildAuthorizedAIContext(user: BusinessUser, organization: Organization): Promise<AIContext> {
-  const database = await readDatabase();
+  const [customersAll, invoicesAll, tasksAll, activitiesAll, businessProfile] = await Promise.all([
+    listOrganizationRecords<Customer>("customers", organization.id),
+    listOrganizationRecords<Invoice>("invoices", organization.id),
+    listOrganizationRecords<Task>("tasks", organization.id),
+    listOrganizationActivity(organization.id),
+    findBusinessProfile(user.id, organization.id),
+  ]);
   const canSeeTeam = canPerformAction(user, "view_team_data") || canPerformAction(user, "all_data_access");
-  const visible = <T extends { organizationId: string }>(records: T[]) => records.filter((record) => record.organizationId === organization.id);
-  const customers = visible(database.customers).filter((customer) => canSeeTeam || customer.createdBy === user.id);
-  const invoices = visible(database.invoices).filter((invoice) => canSeeTeam || invoice.createdBy === user.id);
-  const tasks = visible(database.tasks).filter((task) => canSeeTeam || task.createdBy === user.id || task.assignedTo === user.id);
-  const activities = visible(database.activityEvents)
+  const customers = customersAll.filter((customer) => canSeeTeam || customer.createdBy === user.id);
+  const invoices = invoicesAll.filter((invoice) => canSeeTeam || invoice.createdBy === user.id);
+  const tasks = tasksAll.filter((task) => canSeeTeam || task.createdBy === user.id || task.assignedTo === user.id);
+  const activities = activitiesAll
     .filter((event) => canSeeTeam || event.actorUserId === user.id)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, 20);
@@ -27,6 +33,21 @@ export async function buildAuthorizedAIContext(user: BusinessUser, organization:
   return {
     user,
     organization,
+    businessProfile: businessProfile ? {
+      businessName: businessProfile.businessName,
+      industry: businessProfile.industry,
+      country: businessProfile.country,
+      currency: businessProfile.currency,
+      timezone: businessProfile.timezone,
+      employees: businessProfile.employees,
+      customersPerMonth: businessProfile.customersPerMonth,
+      monthlyRevenueRange: businessProfile.monthlyRevenueRange,
+      offerings: businessProfile.offerings,
+      goals: businessProfile.goals,
+      mainChallenge: businessProfile.mainChallenge,
+      source: businessProfile.profileSource ?? "legacy_profile",
+      updatedAt: businessProfile.profileUpdatedAt ?? businessProfile.updatedAt,
+    } : null,
     recentActivity: activities.map((event) => ({ label: event.type, detail: `${event.entityType}${event.entityId ? ` ${event.entityId}` : ""}`, time: event.createdAt })),
     memoryNodes: [],
     metrics: {

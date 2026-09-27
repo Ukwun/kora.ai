@@ -25,6 +25,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No account found for this email." }, { status: 404 });
     }
 
+    if (user.accountStatus === "suspended") {
+      return NextResponse.json({ error: "This account is unavailable. Contact your workspace owner." }, { status: 403 });
+    }
+    if (user.emailVerified === false) {
+      return NextResponse.json({ error: "Verify your email address before signing in." }, { status: 403 });
+    }
+
     const validPassword = await bcrypt.compare(password, user.passwordHash);
     if (!validPassword) {
       return NextResponse.json({ error: "Incorrect password." }, { status: 401 });

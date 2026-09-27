@@ -37,11 +37,11 @@ export type AIInsight = {
 
 export type AIAnalytics = {
   organizationId: string;
-  totalRevenue: number;
+  totalRevenue: number | null;
   activeCustomers: number;
   openTasks: number;
   retentionRate: number | null;
-  avgInvoiceValue: number;
+  avgInvoiceValue: number | null;
   paymentDaysOverdue: number | null;
   topPerformers: string[];
   bottlenecks: string[];
@@ -52,6 +52,21 @@ export type AIAnalytics = {
 export type AIContext = {
   user: BusinessUser;
   organization: Organization;
+  businessProfile?: {
+    businessName?: string;
+    industry?: string;
+    country?: string;
+    currency?: string;
+    timezone?: string;
+    employees?: number;
+    customersPerMonth?: number;
+    monthlyRevenueRange?: string;
+    offerings?: string[];
+    goals?: string[];
+    mainChallenge?: string;
+    source?: string;
+    updatedAt?: string;
+  } | null;
   recentActivity: Array<{
     label: string;
     detail: string;
@@ -119,7 +134,7 @@ export class AIEngine {
         id: `ins_${Date.now()}_2`,
         organizationId: analytics.organizationId,
         title: "Customer retention below target",
-        summary: `Current retention at ${analytics.retentionRate}%. Industry standard is 85-90%. Investigate customer satisfaction.`,
+        summary: `Recorded customer retention is ${analytics.retentionRate}%. Review the supporting period and records before deciding what to change.`,
         type: "anomaly",
         intensity: "High",
         createdAt: new Date().toISOString(),
@@ -157,11 +172,11 @@ export class AIEngine {
     const evidence = context.evidence;
     return {
       organizationId: context.organization.id,
-      totalRevenue: context.metrics.revenue,
+      totalRevenue: evidence?.paidInvoiceCount ? context.metrics.revenue : null,
       activeCustomers: context.metrics.customers,
       openTasks: context.metrics.tasks,
       retentionRate: context.metrics.retention,
-      avgInvoiceValue: evidence?.paidInvoiceCount ? context.metrics.revenue / evidence.paidInvoiceCount : 0,
+      avgInvoiceValue: evidence?.paidInvoiceCount ? context.metrics.revenue / evidence.paidInvoiceCount : null,
       paymentDaysOverdue: null,
       topPerformers: [],
       bottlenecks: [],
@@ -176,6 +191,7 @@ export class AIEngine {
 Current Business Context:
 - Organization: ${context.organization.name}
 - Industry: ${context.organization.industry}
+- Owner-provided profile context (estimates; use only when relevant and identify as owner-provided): ${context.businessProfile ? JSON.stringify(context.businessProfile) : "not recorded"}
 - User: ${context.user.name} (${context.user.role})
 - Revenue: ₦${context.metrics.revenue.toLocaleString()}
 - Customers: ${context.metrics.customers}
@@ -213,17 +229,5 @@ Provide insights, recommendations, and analysis based on the business data provi
     }
     return responseBody.output_text;
 
-    // Simulate AI response (in production, call OpenAI API)
-    const userMessage = messages[messages.length - 1]?.content || "";
-
-    if (userMessage.toLowerCase().includes("revenue")) {
-      return `Your current revenue is ₦${context.metrics.revenue.toLocaleString()}, which represents strong growth. I recommend focusing on retention and scaling operations to handle increased demand.`;
-    } else if (userMessage.toLowerCase().includes("customer")) {
-      return `You have ${context.metrics.customers} active customers with a retention rate of ${context.metrics.retention}%. Consider implementing a loyalty program to increase repeat business.`;
-    } else if (userMessage.toLowerCase().includes("performance")) {
-      return `Overall performance is strong. Revenue growth is ${context.metrics.revenue > 10000000 ? "accelerating" : "steady"}, and team capacity is ${context.metrics.tasks > 100 ? "reaching limits" : "healthy"}. Focus on automation to scale further.`;
-    } else {
-      return `I'm analyzing your business data. Based on your current metrics, I recommend focusing on ${context.metrics.revenue > 5000000 ? "scaling your team and operations" : "optimizing your sales and customer acquisition processes"}.`;
-    }
   }
 }

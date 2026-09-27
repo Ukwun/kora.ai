@@ -4,7 +4,7 @@ import { getSessionFromRequest } from "@/lib/session";
 import { findUserByEmail } from "@/lib/store";
 import { canPerformAction } from "@/lib/security";
 import { isFirebaseAdminConfigured } from "@/lib/firebase-admin";
-import { createBusinessMemoryRecord, deleteBusinessMemoryRecord, getBusinessMemoryRecord, listBusinessMemoryAuditHistory, listBusinessMemoryRecords, MEMORY_ENTITY_TYPES, updateBusinessMemoryRecord } from "@/lib/business-memory-records";
+import { createBusinessMemoryRecord, decideBusinessRecommendation, deleteBusinessMemoryRecord, getBusinessMemoryRecord, listBusinessMemoryAuditHistory, listBusinessMemoryRecords, MEMORY_ENTITY_TYPES, updateBusinessMemoryRecord, type BusinessMemoryRecord } from "@/lib/business-memory-records";
 
 const createSchema = z.object({
   entityType: z.enum(MEMORY_ENTITY_TYPES),
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
   const parsed = createSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Confirm a valid business memory entry before saving it." }, { status: 400 });
 
-  const { confirmed: _confirmed, ...data } = parsed.data;
+  const data = Object.fromEntries(Object.entries(parsed.data).filter(([key]) => key !== "confirmed")) as Pick<BusinessMemoryRecord, "entityType" | "title" | "summary" | "data" | "tags">;
   const record = await createBusinessMemoryRecord({
     ...data,
     organizationId: auth.user.organizationId,
@@ -95,27 +95,13 @@ export async function PATCH(request: NextRequest) {
   if (decision && ["approved", "rejected"].includes(decision)) {
     if (current.entityType !== "ai_recommendation") return NextResponse.json({ error: "Only recommendations can be approved or rejected." }, { status: 400 });
     if (!canPerformAction(auth.user, "all_data_access")) return NextResponse.json({ error: "Only owners and admins can approve AI recommendations." }, { status: 403 });
-    if (current.status !== "pending_approval") return NextResponse.json({ error: "This recommendation is no longer awaiting a decision." }, { status: 409 });
+    const decisionChanges: Parameters<typeof updateBusinessMemoryRecord>[3] = Object.fromEntries(Object.entries(parsed.data).filter(([key]) => key !== "status"));
+    const decisionResult = await decideBusinessRecommendation(auth.user.organizationId, recordId, auth.user.id, decision as "approved" | "rejected", decisionChanges);
+    if (!decisionResult) return NextResponse.json({ error: "This recommendation is no longer awaiting a decision." }, { status: 409 });
+    return NextResponse.json({ success: true, data: decisionResult.record, decision: decisionResult.decision });
   }
   const record = await updateBusinessMemoryRecord(auth.user.organizationId, recordId, auth.user.id, parsed.data);
   if (!record) return NextResponse.json({ error: "Memory record not found." }, { status: 404 });
-  if (decision && ["approved", "rejected"].includes(decision)) {
-    const actionType = decision === "approved" ? "approved_action" : "rejected_action";
-    await createBusinessMemoryRecord({
-      organizationId: auth.user.organizationId,
-      createdBy: auth.user.id,
-      entityType: actionType,
-      entityId: record.id,
-      title: `${decision === "approved" ? "Approved" : "Rejected"}: ${record.title}`,
-      summary: decision === "approved" ? "A workspace owner approved this recommendation. Approval records consent; it does not execute an external action." : "A workspace owner rejected this recommendation.",
-      data: { recommendationId: record.id, decision },
-      status: "recorded",
-      source: "user_confirmed",
-      sourceId: record.id,
-      verificationStatus: "user_confirmed",
-      tags: ["recommendation_decision"],
-    });
-  }
   return NextResponse.json({ success: true, data: record });
 }
 

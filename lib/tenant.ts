@@ -47,41 +47,6 @@ export type TenantSnapshot = {
   integrations: TenantIntegration[];
 };
 
-export const defaultIntegrations: TenantIntegration[] = [
-  { type: "gmail", connected: true, connectedAt: new Date().toISOString(), metadata: { source: "gmail-connector" } },
-  { type: "whatsapp", connected: false, metadata: { source: "manual" } },
-  { type: "calendar", connected: true, connectedAt: new Date().toISOString(), metadata: { source: "google-calendar" } },
-  { type: "stripe", connected: false, metadata: { source: "manual" } },
-  { type: "flutterwave", connected: true, connectedAt: new Date().toISOString(), metadata: { source: "flutterwave" } },
-];
-
-export const defaultMemberships: TenantMembership[] = [
-  {
-    id: "member_1",
-    userId: "user_demo_1",
-    organizationId: "org_kora_1",
-    role: "owner",
-    status: "active",
-    joinedAt: new Date().toISOString(),
-  },
-  {
-    id: "member_2",
-    userId: "user_demo_2",
-    organizationId: "org_kora_1",
-    role: "admin",
-    status: "active",
-    joinedAt: new Date().toISOString(),
-  },
-  {
-    id: "member_3",
-    userId: "user_demo_3",
-    organizationId: "org_kora_1",
-    role: "manager",
-    status: "invited",
-    joinedAt: new Date().toISOString(),
-  },
-];
-
 export async function getTenantSnapshot(organizationId: string): Promise<TenantSnapshot> {
   const database = await readDatabase();
   const subscription = database.billingSubscriptions.find((entry) => entry.organizationId === organizationId);
@@ -143,28 +108,6 @@ export function getPlanSummary(plan: TenantPlan) {
   };
 
   return planMap[plan];
-}
-
-export function syncIntegrationState(
-  integrations: TenantIntegration[],
-  integrationType: TenantIntegrationType,
-  connected = true
-): TenantIntegration[] {
-  return integrations.map((integration) => {
-    if (integration.type !== integrationType) {
-      return integration;
-    }
-
-    return {
-      ...integration,
-      connected,
-      connectedAt: connected ? new Date().toISOString() : integration.connectedAt,
-      metadata: {
-        ...integration.metadata,
-        source: integration.metadata?.source ?? "manual",
-      },
-    };
-  });
 }
 
 export function enforceTenantIsolation<T extends { organizationId?: string }>(

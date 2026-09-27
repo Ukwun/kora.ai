@@ -1,7 +1,6 @@
 import type {
   BusinessProfile,
   BusinessMemoryNode,
-  BusinessChallenge,
 } from "./business-profile";
 import { findBusinessProfile, saveBusinessProfile } from "./store";
 
@@ -12,6 +11,11 @@ export async function getOrCreateBusinessProfile(
 ): Promise<BusinessProfile> {
   const existingProfile = await findBusinessProfile(userId, organizationId);
   if (existingProfile) {
+    if (existingProfile.behaviorPatterns && "invoiceCycle" in existingProfile.behaviorPatterns) {
+      delete (existingProfile.behaviorPatterns as Record<string, unknown>).invoiceCycle;
+      existingProfile.updatedAt = new Date().toISOString();
+      await saveBusinessProfile(existingProfile);
+    }
     return existingProfile;
   }
 
@@ -140,9 +144,9 @@ export async function analyzeMetrics(
   organizationId: string,
   userId: string
 ): Promise<{
-  revenue: { current: number; trend: string };
-  customers: { current: number; trend: string };
-  growth: { monthly: number; quarterly: number };
+  revenue: { current: number | null; trend: "up" | "down" | "stable" | "unknown" };
+  customers: { current: number; trend: "unknown" };
+  growth: { monthly: number | null; quarterly: number | null };
   topInsights: string[];
 }> {
   const profile = await getOrCreateBusinessProfile(userId, organizationId);
@@ -150,19 +154,15 @@ export async function analyzeMetrics(
   const revenueMetrics = profile.metrics.filter((m) =>
     m.name.toLowerCase().includes("revenue")
   );
-  const customerMetrics = profile.metrics.filter((m) =>
-    m.name.toLowerCase().includes("customer")
-  );
-
-  const currentRevenue = revenueMetrics[revenueMetrics.length - 1]?.value || 0;
-  const previousRevenue = revenueMetrics[revenueMetrics.length - 2]?.value || 0;
+  const currentRevenue = revenueMetrics[revenueMetrics.length - 1]?.value;
+  const previousRevenue = revenueMetrics[revenueMetrics.length - 2]?.value;
 
   const revenueTrend =
     typeof currentRevenue === "number" && typeof previousRevenue === "number"
       ? currentRevenue > previousRevenue
         ? "up"
         : "down"
-      : "stable";
+      : "unknown";
 
   const insights: string[] = [];
 
@@ -176,16 +176,16 @@ export async function analyzeMetrics(
 
   return {
     revenue: {
-      current: typeof currentRevenue === "number" ? currentRevenue : 0,
+      current: typeof currentRevenue === "number" ? currentRevenue : null,
       trend: revenueTrend,
     },
     customers: {
       current: profile.customersPerMonth,
-      trend: "stable",
+      trend: "unknown",
     },
     growth: {
-      monthly: 5,
-      quarterly: 15,
+      monthly: null,
+      quarterly: null,
     },
     topInsights: insights,
   };
@@ -226,44 +226,6 @@ export async function getBusinessContext(
   };
 }
 
-// Connection tracking
-export async function recordIntegrationConnection(
-  organizationId: string,
-  userId: string,
-  integrationType: string
-): Promise<BusinessProfile> {
-  const profile = await getOrCreateBusinessProfile(userId, organizationId);
-
-  const existingIntegration = profile.integrations.find(
-    (i) => i.type === integrationType
-  );
-
-  if (existingIntegration) {
-    existingIntegration.connected = true;
-    existingIntegration.connectedAt = new Date().toISOString();
-  } else {
-    profile.integrations.push({
-      type: integrationType as BusinessProfile["integrations"][number]["type"],
-      connected: true,
-      connectedAt: new Date().toISOString(),
-    });
-  }
-
-  profile.updatedAt = new Date().toISOString();
-  await saveBusinessProfile(profile);
-
-  // Add memory node
-  await addMemoryNode(organizationId, userId, {
-    category: "insight",
-    title: `Connected to ${integrationType}`,
-    content: `Integration with ${integrationType} is now active. Real-time data syncing enabled.`,
-    confidence: 95,
-    source: "manual",
-  });
-
-  return profile;
-}
-
 export async function recordIntegrationInterest(
   organizationId: string,
   userId: string,
@@ -283,7 +245,7 @@ export async function recordIntegrationInterest(
   return profile;
 }
 
-// Simulate learning from user actions
+// Record verified operational activity as business-memory observations.
 export async function recordUserAction(
   organizationId: string,
   userId: string,
@@ -295,13 +257,10 @@ export async function recordUserAction(
   // Learn from action
   switch (actionType) {
     case "invoice_created":
-      if (!profile.behaviorPatterns.invoiceCycle) {
-        profile.behaviorPatterns.invoiceCycle = 7; // default
-      }
       await addMemoryNode(organizationId, userId, {
         category: "observation",
         title: "Invoice Activity",
-        content: "User created an invoice",
+        content: `Invoice created. Recorded context: ${JSON.stringify(metadata ?? {})}`,
         confidence: 90,
         source: "observed",
       });
@@ -311,7 +270,7 @@ export async function recordUserAction(
       await addMemoryNode(organizationId, userId, {
         category: "observation",
         title: "Customer Acquisition",
-        content: "New customer added to system",
+        content: `Customer added. Recorded context: ${JSON.stringify(metadata ?? {})}`,
         confidence: 95,
         source: "observed",
       });
@@ -321,7 +280,7 @@ export async function recordUserAction(
       await addMemoryNode(organizationId, userId, {
         category: "observation",
         title: "Payment Recorded",
-        content: "Payment received from customer",
+        content: `Payment received. Recorded context: ${JSON.stringify(metadata ?? {})}`,
         confidence: 95,
         source: "observed",
       });
@@ -331,7 +290,7 @@ export async function recordUserAction(
       await addMemoryNode(organizationId, userId, {
         category: "observation",
         title: "Task Completion",
-        content: "User completed a task",
+        content: `Task completed. Recorded context: ${JSON.stringify(metadata ?? {})}`,
         confidence: 90,
         source: "observed",
       });

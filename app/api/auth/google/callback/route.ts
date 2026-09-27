@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
-import { createOrganization, createUser, findUserByEmail } from "@/lib/store";
+import { createOrganization, createUser, findUserByEmail, readDatabase, writeDatabase } from "@/lib/store";
 import { setSessionCookie } from "@/lib/session";
 
 type GoogleTokenResponse = { access_token?: string; error?: string; error_description?: string };
@@ -33,9 +33,14 @@ export async function GET(request: NextRequest) {
     if (!profileResponse.ok || !profile.email || !profile.email_verified) throw new Error("Google did not return a verified email address");
 
     let user = await findUserByEmail(profile.email);
+    if (user?.accountStatus === "suspended") throw new Error("This account is unavailable.");
     if (!user) {
       const organization = await createOrganization({ name: `${(profile.name || profile.email).trim()}'s workspace`, industry: "Other", timezone: "Africa/Lagos", currency: "NGN" });
       user = await createUser({ name: profile.name?.trim() || profile.email.split("@")[0], email: profile.email, passwordHash: await bcrypt.hash(randomBytes(32).toString("hex"), 12), role: "owner", organizationId: organization.id });
+    } else if (user.emailVerified === false) {
+      const database = await readDatabase();
+      const storedUser = database.users.find((entry) => entry.id === user?.id);
+      if (storedUser) { storedUser.emailVerified = true; await writeDatabase(database); user.emailVerified = true; }
     }
 
     const response = NextResponse.redirect(new URL("/onboarding", request.url));

@@ -16,6 +16,8 @@ export type BusinessUser = {
   role: UserRole;
   organizationId: string;
   createdAt: string;
+  emailVerified: boolean;
+  accountStatus: "active" | "suspended";
 };
 
 export type Organization = {
@@ -121,6 +123,8 @@ export type PasswordResetToken = {
   usedAt?: string;
 };
 
+export type EmailVerificationToken = { tokenHash: string; userId: string; expiresAt: string; usedAt?: string };
+
 export type BillingSubscription = {
   organizationId: string;
   plan: "starter" | "growth" | "business";
@@ -145,6 +149,7 @@ export type AppDatabase = {
   activityEvents: ActivityEvent[];
   memberships: Membership[];
   passwordResetTokens: PasswordResetToken[];
+  emailVerificationTokens: EmailVerificationToken[];
   billingSubscriptions: BillingSubscription[];
 };
 
@@ -170,6 +175,7 @@ function defaultDatabaseForDevelopment(): AppDatabase {
     activityEvents: [],
     memberships: [],
     passwordResetTokens: [],
+    emailVerificationTokens: [],
     billingSubscriptions: [],
   };
 }
@@ -193,6 +199,8 @@ const defaultUsers: BusinessUser[] = [
     passwordHash: bcrypt.hashSync("demo1234", 10),
     role: "owner",
     organizationId: "org_kora_1",
+    emailVerified: true,
+    accountStatus: "active",
     createdAt: new Date().toISOString(),
   },
 ];
@@ -220,7 +228,7 @@ export async function readDatabase(): Promise<AppDatabase> {
     const parsed = JSON.parse(raw) as AppDatabase;
     return {
       organizations: parsed.organizations ?? defaultDatabase.organizations,
-      users: parsed.users ?? defaultDatabase.users,
+      users: (parsed.users ?? defaultDatabase.users).map((user) => ({ ...user, emailVerified: user.emailVerified ?? true, accountStatus: user.accountStatus ?? "active" })),
       onboarding: parsed.onboarding ?? defaultDatabase.onboarding,
       profiles: parsed.profiles ?? defaultDatabase.profiles,
       customers: parsed.customers ?? defaultDatabase.customers,
@@ -230,6 +238,7 @@ export async function readDatabase(): Promise<AppDatabase> {
       activityEvents: parsed.activityEvents ?? defaultDatabase.activityEvents,
       memberships: parsed.memberships ?? defaultDatabase.memberships,
       passwordResetTokens: parsed.passwordResetTokens ?? defaultDatabase.passwordResetTokens,
+      emailVerificationTokens: parsed.emailVerificationTokens ?? defaultDatabase.emailVerificationTokens,
       billingSubscriptions: parsed.billingSubscriptions ?? defaultDatabase.billingSubscriptions,
     };
   } catch {
@@ -247,9 +256,9 @@ export async function writeDatabase(data: AppDatabase) {
 }
 
 async function readPostgresDatabase(): Promise<AppDatabase> {
-  const [organizations, users, onboarding, profiles, customers, tasks, invoices, payments, activityEvents, memberships, passwordResetTokens, billingSubscriptions] = await Promise.all([
+  const [organizations, users, onboarding, profiles, customers, tasks, invoices, payments, activityEvents, memberships, passwordResetTokens, emailVerificationTokens, billingSubscriptions] = await Promise.all([
     query<Organization>("SELECT id, name, industry, timezone, currency, created_at AS \"createdAt\" FROM organizations"),
-    query<BusinessUser>("SELECT id, name, email, password_hash AS \"passwordHash\", role, organization_id AS \"organizationId\", created_at AS \"createdAt\" FROM users"),
+    query<BusinessUser>("SELECT id, name, email, password_hash AS \"passwordHash\", role, organization_id AS \"organizationId\", created_at AS \"createdAt\", email_verified AS \"emailVerified\", account_status AS \"accountStatus\" FROM users"),
     query<OnboardingState>("SELECT user_id AS \"userId\", business_name AS \"businessName\", industry, goals, tools, challenges, created_at AS \"createdAt\" FROM onboarding_states"),
     query<{ id: string; userId: string; organizationId: string; data: Partial<BusinessProfile>; createdAt: string; updatedAt: string }>("SELECT id, user_id AS \"userId\", organization_id AS \"organizationId\", data, created_at AS \"createdAt\", updated_at AS \"updatedAt\" FROM business_profiles"),
     query<Customer>("SELECT id, organization_id AS \"organizationId\", name, email, phone, status, notes, created_by AS \"createdBy\", created_at AS \"createdAt\", updated_at AS \"updatedAt\" FROM customers"),
@@ -259,6 +268,7 @@ async function readPostgresDatabase(): Promise<AppDatabase> {
     query<ActivityEvent>("SELECT id, organization_id AS \"organizationId\", actor_user_id AS \"actorUserId\", type, entity_type AS \"entityType\", entity_id AS \"entityId\", payload, created_at AS \"createdAt\" FROM activity_events"),
     query<Membership>("SELECT id, organization_id AS \"organizationId\", user_id AS \"userId\", email, role, status, token, COALESCE(invited_at, joined_at, NOW()) AS \"createdAt\" FROM memberships"),
     query<PasswordResetToken>("SELECT token_hash AS \"tokenHash\", user_id AS \"userId\", expires_at AS \"expiresAt\", used_at AS \"usedAt\" FROM password_reset_tokens"),
+    query<EmailVerificationToken>("SELECT token_hash AS \"tokenHash\", user_id AS \"userId\", expires_at AS \"expiresAt\", used_at AS \"usedAt\" FROM email_verification_tokens"),
     query<BillingSubscription>("SELECT organization_id AS \"organizationId\", plan, status, provider, provider_customer_id AS \"providerCustomerId\", provider_subscription_id AS \"providerSubscriptionId\", current_period_end AS \"currentPeriodEnd\", seat_limit AS \"seatLimit\", updated_at AS \"updatedAt\" FROM billing_subscriptions"),
   ]);
 
@@ -274,6 +284,7 @@ async function readPostgresDatabase(): Promise<AppDatabase> {
     activityEvents: activityEvents.rows,
     memberships: memberships.rows,
     passwordResetTokens: passwordResetTokens.rows,
+    emailVerificationTokens: emailVerificationTokens.rows,
     billingSubscriptions: billingSubscriptions.rows,
   };
 }
@@ -281,7 +292,7 @@ async function readPostgresDatabase(): Promise<AppDatabase> {
 async function writePostgresDatabase(data: AppDatabase) {
   await withTransaction(async (client) => {
     for (const organization of data.organizations) await client.query("INSERT INTO organizations (id, name, industry, timezone, currency, created_at) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name, industry=EXCLUDED.industry, timezone=EXCLUDED.timezone, currency=EXCLUDED.currency", [organization.id, organization.name, organization.industry, organization.timezone, organization.currency, organization.createdAt]);
-    for (const user of data.users) await client.query("INSERT INTO users (id, organization_id, name, email, password_hash, role, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (id) DO UPDATE SET organization_id=EXCLUDED.organization_id, name=EXCLUDED.name, email=EXCLUDED.email, password_hash=EXCLUDED.password_hash, role=EXCLUDED.role", [user.id, user.organizationId, user.name, user.email, user.passwordHash, user.role, user.createdAt]);
+    for (const user of data.users) await client.query("INSERT INTO users (id, organization_id, name, email, password_hash, role, created_at, email_verified, account_status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (id) DO UPDATE SET organization_id=EXCLUDED.organization_id, name=EXCLUDED.name, email=EXCLUDED.email, password_hash=EXCLUDED.password_hash, role=EXCLUDED.role, email_verified=EXCLUDED.email_verified, account_status=EXCLUDED.account_status", [user.id, user.organizationId, user.name, user.email, user.passwordHash, user.role, user.createdAt, user.emailVerified, user.accountStatus]);
     for (const profile of data.profiles) {
       const { id, userId, organizationId, createdAt, updatedAt, ...profileData } = profile;
       await client.query("INSERT INTO business_profiles (id, user_id, organization_id, data, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data, updated_at=EXCLUDED.updated_at", [id, userId, organizationId, profileData, createdAt, updatedAt]);
@@ -294,16 +305,25 @@ async function writePostgresDatabase(data: AppDatabase) {
     for (const event of data.activityEvents) await client.query("INSERT INTO activity_events (id, organization_id, actor_user_id, type, entity_type, entity_id, payload, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (id) DO UPDATE SET payload=EXCLUDED.payload", [event.id, event.organizationId, event.actorUserId, event.type, event.entityType, event.entityId ?? null, event.payload, event.createdAt]);
     for (const membership of data.memberships) await client.query("INSERT INTO memberships (id, organization_id, user_id, email, role, status, invited_at) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (id) DO UPDATE SET user_id=EXCLUDED.user_id, email=EXCLUDED.email, role=EXCLUDED.role, status=EXCLUDED.status, invited_at=EXCLUDED.invited_at", [membership.id, membership.organizationId, membership.userId ?? null, membership.email, membership.role, membership.status, membership.createdAt]);
     for (const token of data.passwordResetTokens) await client.query("INSERT INTO password_reset_tokens (token_hash, user_id, expires_at, used_at) VALUES ($1,$2,$3,$4) ON CONFLICT (token_hash) DO UPDATE SET expires_at=EXCLUDED.expires_at, used_at=EXCLUDED.used_at", [token.tokenHash, token.userId, token.expiresAt, token.usedAt ?? null]);
+    for (const token of data.emailVerificationTokens) await client.query("INSERT INTO email_verification_tokens (token_hash, user_id, expires_at, used_at) VALUES ($1,$2,$3,$4) ON CONFLICT (token_hash) DO UPDATE SET expires_at=EXCLUDED.expires_at, used_at=EXCLUDED.used_at", [token.tokenHash, token.userId, token.expiresAt, token.usedAt ?? null]);
     for (const subscription of data.billingSubscriptions) await client.query("INSERT INTO billing_subscriptions (organization_id, plan, status, provider, provider_customer_id, provider_subscription_id, current_period_end, seat_limit, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (organization_id) DO UPDATE SET plan=EXCLUDED.plan, status=EXCLUDED.status, provider=EXCLUDED.provider, provider_customer_id=EXCLUDED.provider_customer_id, provider_subscription_id=EXCLUDED.provider_subscription_id, current_period_end=EXCLUDED.current_period_end, seat_limit=EXCLUDED.seat_limit, updated_at=EXCLUDED.updated_at", [subscription.organizationId, subscription.plan, subscription.status, subscription.provider ?? null, subscription.providerCustomerId ?? null, subscription.providerSubscriptionId ?? null, subscription.currentPeriodEnd ?? null, subscription.seatLimit, subscription.updatedAt]);
   });
 }
 
 export async function findUserByEmail(email: string) {
+  if (postgresEnabled) {
+    const result = await query<BusinessUser>(`SELECT id, name, email, password_hash AS "passwordHash", role, organization_id AS "organizationId", created_at AS "createdAt", email_verified AS "emailVerified", account_status AS "accountStatus" FROM users WHERE LOWER(email) = $1 LIMIT 1`, [email.toLowerCase()]);
+    return result.rows[0] ?? null;
+  }
   const db = await readDatabase();
   return db.users.find((user) => user.email.toLowerCase() === email.toLowerCase()) ?? null;
 }
 
 export async function findOrganizationById(id: string) {
+  if (postgresEnabled) {
+    const result = await query<Organization>(`SELECT id, name, industry, timezone, currency, created_at AS "createdAt" FROM organizations WHERE id = $1 LIMIT 1`, [id]);
+    return result.rows[0] ?? null;
+  }
   const db = await readDatabase();
   return db.organizations.find((organization) => organization.id === id) ?? null;
 }
@@ -327,6 +347,7 @@ export async function createUser(data: {
   passwordHash: string;
   role?: UserRole;
   organizationId?: string;
+  emailVerified?: boolean;
 }) {
   const db = await readDatabase();
   const user: BusinessUser = {
@@ -336,6 +357,8 @@ export async function createUser(data: {
     passwordHash: data.passwordHash,
     role: data.role ?? "owner",
     organizationId: data.organizationId ?? "org_kora_1",
+    emailVerified: data.emailVerified ?? true,
+    accountStatus: "active",
     createdAt: new Date().toISOString(),
   };
 
@@ -362,6 +385,18 @@ export async function createOrganization(data: {
 
   db.organizations.push(organization);
   await writeDatabase(db);
+  return organization;
+}
+
+export async function updateOrganizationProfile(organizationId: string, changes: Pick<Organization, "name" | "industry" | "currency" | "timezone">) {
+  const database = await readDatabase();
+  const organization = database.organizations.find((entry) => entry.id === organizationId);
+  if (!organization) return null;
+  organization.name = changes.name;
+  organization.industry = changes.industry;
+  organization.currency = changes.currency;
+  organization.timezone = changes.timezone;
+  await writeDatabase(database);
   return organization;
 }
 
@@ -394,6 +429,11 @@ export async function getOnboardingForUser(userId: string) {
 }
 
 export async function findBusinessProfile(userId: string, organizationId: string) {
+  if (postgresEnabled) {
+    const result = await query<{ id: string; userId: string; organizationId: string; data: Partial<BusinessProfile>; createdAt: string; updatedAt: string }>(`SELECT id, user_id AS "userId", organization_id AS "organizationId", data, created_at AS "createdAt", updated_at AS "updatedAt" FROM business_profiles WHERE user_id = $1 AND organization_id = $2 LIMIT 1`, [userId, organizationId]);
+    const row = result.rows[0];
+    return row ? { ...row, ...row.data } as BusinessProfile : null;
+  }
   const db = await readDatabase();
   return db.profiles.find(
     (profile) => profile.userId === userId && profile.organizationId === organizationId
@@ -418,14 +458,30 @@ export async function saveBusinessProfile(profile: BusinessProfile) {
         createdBy: profile.userId,
         entityType: "organization_profile",
         entityId: profile.id,
-        title: "Business profile",
-        summary: `${profile.type} business · ${profile.employees} employees · focus: ${profile.mainChallenge.replace(/_/g, " ")}`,
+        title: profile.businessName || "Business profile",
+        summary: `${profile.industry || profile.type} business · ${profile.employees} employees · focus: ${profile.mainChallenge.replace(/_/g, " ")}`,
+        source: "user_confirmed",
+        verificationStatus: "user_confirmed",
         data: {
+          businessName: profile.businessName,
+          industry: profile.industry,
+          country: profile.country,
+          currency: profile.currency,
+          timezone: profile.timezone,
           type: profile.type,
           employees: profile.employees,
           customersPerMonth: profile.customersPerMonth,
+          monthlyRevenueRange: profile.monthlyRevenueRange,
+          offerings: profile.offerings,
+          goals: profile.goals,
+          communicationChannels: profile.communicationChannels,
+          preferredPaymentMethods: profile.preferredPaymentMethods,
+          workingHours: profile.workingHours,
+          reportingPreferences: profile.reportingPreferences,
           software: profile.existingSoftware,
           mainChallenge: profile.mainChallenge,
+          profileSource: profile.profileSource,
+          profileUpdatedAt: profile.profileUpdatedAt,
           integrations: profile.integrations.map(({ type, connected, connectedAt }) => ({ type, connected, connectedAt })),
           onboardingComplete: profile.onboardingComplete,
         },

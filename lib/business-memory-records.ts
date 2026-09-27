@@ -128,6 +128,51 @@ export async function updateBusinessMemoryRecord(
   return updated as BusinessMemoryRecord | null;
 }
 
+export async function decideBusinessRecommendation(
+  organizationId: string,
+  recordId: string,
+  actorUserId: string,
+  decision: "approved" | "rejected",
+  changes: Partial<Pick<BusinessMemoryRecord, "title" | "summary" | "data" | "verificationStatus" | "confidenceScore" | "tags">> = {},
+) {
+  const database = getAdminFirestore();
+  const recordRef = memoryCollection(organizationId).doc(recordId);
+  const decisionRef = memoryCollection(organizationId).doc();
+  const recordAuditRef = recordRef.collection("auditHistory").doc();
+  const decisionAuditRef = decisionRef.collection("auditHistory").doc();
+  const now = new Date().toISOString();
+  return database.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(recordRef);
+    if (!snapshot.exists) return;
+    const current = snapshot.data() as BusinessMemoryRecord;
+    if (current.deletedAt || current.entityType !== "ai_recommendation" || current.status !== "pending_approval") return;
+    const updated: BusinessMemoryRecord = { ...current, ...changes, status: decision, updatedAt: now };
+    const actionType = decision === "approved" ? "approved_action" : "rejected_action";
+    const actionRecord: BusinessMemoryRecord = {
+      id: decisionRef.id,
+      organizationId,
+      entityType: actionType,
+      entityId: current.id,
+      title: `${decision === "approved" ? "Approved" : "Rejected"}: ${current.title}`,
+      summary: decision === "approved" ? "An owner approved this recommendation. Approval records consent; it does not execute an external action." : "An owner rejected this recommendation.",
+      data: { recommendationId: current.id, decision },
+      status: "recorded",
+      source: "user_confirmed",
+      sourceId: current.id,
+      verificationStatus: "user_confirmed",
+      createdBy: actorUserId,
+      createdAt: now,
+      updatedAt: now,
+      tags: ["recommendation_decision"],
+    };
+    transaction.update(recordRef, { ...changes, status: decision, updatedAt: now });
+    transaction.create(recordAuditRef, { id: recordAuditRef.id, organizationId, recordId, actorUserId, action: "updated", changes: { ...changes, status: decision }, createdAt: now } satisfies MemoryAuditEvent);
+    transaction.create(decisionRef, actionRecord);
+    transaction.create(decisionAuditRef, { id: decisionAuditRef.id, organizationId, recordId: decisionRef.id, actorUserId, action: "created", changes: { entityType: actionType, source: "user_confirmed" }, createdAt: now } satisfies MemoryAuditEvent);
+    return { record: updated, decision: actionRecord };
+  });
+}
+
 export async function deleteBusinessMemoryRecord(organizationId: string, recordId: string, actorUserId: string) {
   const ref = memoryCollection(organizationId).doc(recordId);
   const auditRef = ref.collection("auditHistory").doc();
@@ -151,6 +196,8 @@ export async function recordStructuredEntityMemory(input: {
   title: string;
   summary: string;
   data: Record<string, unknown>;
+  source?: MemorySource;
+  verificationStatus?: MemoryVerification;
 }) {
   const database = getAdminFirestore();
   const ref = memoryCollection(input.organizationId).doc(`${input.entityType}_${input.entityId}`);
@@ -164,9 +211,9 @@ export async function recordStructuredEntityMemory(input: {
       id: ref.id,
       ...input,
       status: current?.status ?? "active",
-      source: "structured_application",
+      source: input.source ?? "structured_application",
       sourceId: input.entityId,
-      verificationStatus: "verified",
+      verificationStatus: input.verificationStatus ?? "verified",
       tags: current?.tags ?? [],
       createdAt: current?.createdAt ?? now,
       updatedAt: now,

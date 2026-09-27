@@ -1,6 +1,7 @@
 import { readDatabase, writeDatabase, type ActivityEvent, type Customer, type Invoice, type Payment, type Task } from "./store";
 import { isFirebaseAdminConfigured } from "./firebase-admin";
 import { recordStructuredEntityMemory } from "./business-memory-records";
+import { postgresEnabled, query } from "./db";
 
 function createId(prefix: string) {
   return `${prefix}_${crypto.randomUUID()}`;
@@ -10,8 +11,26 @@ export async function listOrganizationRecords<T extends { organizationId: string
   key: "customers" | "tasks" | "invoices" | "payments",
   organizationId: string
 ): Promise<T[]> {
+  if (postgresEnabled) {
+    const statements = {
+      customers: `SELECT id, organization_id AS "organizationId", name, email, phone, status, notes, created_by AS "createdBy", created_at AS "createdAt", updated_at AS "updatedAt" FROM customers WHERE organization_id = $1 ORDER BY created_at DESC`,
+      tasks: `SELECT id, organization_id AS "organizationId", title, description, status, priority, assigned_to AS "assignedTo", created_by AS "createdBy", due_at AS "dueAt", created_at AS "createdAt", updated_at AS "updatedAt" FROM tasks WHERE organization_id = $1 ORDER BY created_at DESC`,
+      invoices: `SELECT id, organization_id AS "organizationId", customer_id AS "customerId", number, amount::float8 AS amount, currency, status, due_at AS "dueAt", created_by AS "createdBy", created_at AS "createdAt", updated_at AS "updatedAt" FROM invoices WHERE organization_id = $1 ORDER BY created_at DESC`,
+      payments: `SELECT id, organization_id AS "organizationId", invoice_id AS "invoiceId", customer_id AS "customerId", amount::float8 AS amount, currency, provider, provider_reference AS "providerReference", status, received_at AS "receivedAt", created_at AS "createdAt" FROM payments WHERE organization_id = $1 ORDER BY created_at DESC`,
+    } as const;
+    const result = await query<T>(statements[key], [organizationId]);
+    return result.rows;
+  }
   const database = await readDatabase();
   return database[key].filter((record) => record.organizationId === organizationId) as unknown as T[];
+}
+
+export async function listOrganizationActivity(organizationId: string): Promise<ActivityEvent[]> {
+  if (postgresEnabled) {
+    const result = await query<ActivityEvent>(`SELECT id, organization_id AS "organizationId", actor_user_id AS "actorUserId", type, entity_type AS "entityType", entity_id AS "entityId", payload, created_at AS "createdAt" FROM activity_events WHERE organization_id = $1 ORDER BY created_at DESC LIMIT 500`, [organizationId]);
+    return result.rows;
+  }
+  return (await readDatabase()).activityEvents.filter((event) => event.organizationId === organizationId);
 }
 
 export async function createCustomer(data: Omit<Customer, "id" | "createdAt" | "updatedAt">) {

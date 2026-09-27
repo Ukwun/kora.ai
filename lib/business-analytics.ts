@@ -1,6 +1,4 @@
-// Business Analytics and Pattern Recognition
-
-import type { BusinessProfile } from "./business-profile";
+// Business analytics helpers operate on recorded business events.
 
 export interface BehaviorPattern {
   name: string;
@@ -26,15 +24,7 @@ export interface FollowUpOpportunity {
   quotationsFollowedUp: number;
   followUpRate: number;
   missedOpportunities: number;
-  estimatedValue: number;
-  recommendation: string;
-}
-
-export interface InventoryPattern {
-  productName: string;
-  sellOutCycle: number; // days
-  nextReorderDate: string;
-  stockLevel: number;
+  estimatedValue: number | null;
   recommendation: string;
 }
 
@@ -71,6 +61,7 @@ export function analyzeFollowUpPattern(
   quotations: Array<{
     id: string;
     followed_up: boolean;
+    amount?: number;
   }>
 ): FollowUpOpportunity {
   const total = quotations.length;
@@ -83,47 +74,12 @@ export function analyzeFollowUpPattern(
     quotationsFollowedUp: followed,
     followUpRate: Math.round(followUpRate),
     missedOpportunities: missed,
-    estimatedValue: missed * 50000, // estimated value per quote
-    recommendation: `You've sent ${total} quotations this month. ${missed} haven't received a follow-up. Businesses often recover opportunities simply by following up once. Would you like me to draft those messages?`,
-  };
-}
-
-// Detect inventory patterns
-export function analyzeInventoryPattern(
-  productName: string,
-  salesHistory: Array<{ date: string; sold: boolean }>
-): InventoryPattern {
-  // Calculate average sell-out cycle
-  const cycles: number[] = [];
-  let lastSaleDate: Date | null = null;
-
-  for (const entry of salesHistory) {
-    if (entry.sold) {
-      if (lastSaleDate) {
-        const daysElapsed = Math.floor(
-          (new Date(entry.date).getTime() - lastSaleDate.getTime()) /
-            (1000 * 60 * 60 * 24)
-        );
-        cycles.push(daysElapsed);
-      }
-      lastSaleDate = new Date(entry.date);
-    }
-  }
-
-  const avgCycle =
-    cycles.length > 0
-      ? Math.round(cycles.reduce((a, b) => a + b, 0) / cycles.length)
-      : 28; // default to 28 days
-
-  const nextReorder = new Date();
-  nextReorder.setDate(nextReorder.getDate() + Math.max(0, avgCycle - 7)); // Reorder 7 days before cycle
-
-  return {
-    productName,
-    sellOutCycle: avgCycle,
-    nextReorderDate: nextReorder.toISOString().split("T")[0],
-    stockLevel: 50, // placeholder
-    recommendation: `${productName} usually sells out every ${avgCycle} days. Reorder before ${nextReorder.toLocaleDateString()}.`,
+    estimatedValue: quotations.filter((quote) => !quote.followed_up && typeof quote.amount === "number").length === missed
+      ? quotations.filter((quote) => !quote.followed_up).reduce((sum, quote) => sum + (quote.amount ?? 0), 0)
+      : null,
+    recommendation: total
+      ? `There ${missed === 1 ? "is" : "are"} ${missed} of ${total} recorded quotations without a follow-up status. Review the quotation records before contacting customers.`
+      : "No quotation records are available to assess follow-up activity.",
   };
 }
 
@@ -132,6 +88,8 @@ export function analyzePaymentPattern(
   invoices: Array<{
     createdAt: string;
     paidAt?: string;
+    dueAt?: string;
+    amount: number;
   }>
 ): {
   averagePaymentDays: number;
@@ -140,6 +98,7 @@ export function analyzePaymentPattern(
 } {
   const paymentDays: number[] = [];
   let overdueCount = 0;
+  let overdueTotalValue = 0;
 
   for (const invoice of invoices) {
     if (invoice.paidAt) {
@@ -149,15 +108,11 @@ export function analyzePaymentPattern(
         (paid.getTime() - created.getTime()) / (1000 * 60 * 60 * 24)
       );
       paymentDays.push(days);
-    } else {
-      // Still unpaid, consider overdue if > 30 days
-      const created = new Date(invoice.createdAt);
+    } else if (invoice.dueAt) {
       const now = new Date();
-      const days = Math.floor(
-        (now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24)
-      );
-      if (days > 30) {
+      if (new Date(invoice.dueAt) < now) {
         overdueCount++;
+        overdueTotalValue += invoice.amount;
       }
     }
   }
@@ -175,76 +130,6 @@ export function analyzePaymentPattern(
   return {
     averagePaymentDays: avgDays,
     overduePercentage: overduePct,
-    overdueTotalValue: overdueCount * 100000, // placeholder
+    overdueTotalValue,
   };
-}
-
-// Generate AI recommendations based on patterns
-export function generatePatternRecommendations(
-  profile: BusinessProfile
-): string[] {
-  const recommendations: string[] = [];
-
-  // If challenge is cash flow, check payment patterns
-  if (profile.mainChallenge === "cash_flow") {
-    if (profile.behaviorPatterns.invoiceCycle) {
-      recommendations.push(
-        `Your invoice cycle is ${profile.behaviorPatterns.invoiceCycle} days. Consider automating reminders.`
-      );
-    }
-  }
-
-  // If many quotations sent, check follow-up
-  if (profile.memoryNodes.length > 10) {
-    const quotationMemory = profile.memoryNodes.find((n) =>
-      n.title.includes("quotation")
-    );
-    if (quotationMemory) {
-      recommendations.push(
-        "Quotations are being tracked. Have you followed up on all of them?"
-      );
-    }
-  }
-
-  // If retail or restaurant, check inventory
-  if (["retail", "restaurant"].includes(profile.type)) {
-    recommendations.push("Inventory patterns are being monitored automatically.");
-  }
-
-  // If has employees, suggest team productivity tracking
-  if (profile.employees > 1) {
-    recommendations.push("You have a team. Let me track who's most productive.");
-  }
-
-  return recommendations;
-}
-
-// Calculate business health score
-export function calculateBusinessHealthScore(
-  profile: BusinessProfile
-): number {
-  let score = 50; // base score
-
-  // Onboarding bonus
-  if (profile.onboardingComplete) {
-    score += 10;
-  }
-
-  // Integration bonus
-  const connectedIntegrations = profile.integrations.filter(
-    (i) => i.connected
-  ).length;
-  score += connectedIntegrations * 5;
-
-  // Activity bonus
-  if (profile.memoryNodes.length > 0) {
-    score += Math.min(20, profile.memoryNodes.length);
-  }
-
-  // Behavior pattern bonus
-  if (Object.keys(profile.behaviorPatterns).length > 0) {
-    score += 10;
-  }
-
-  return Math.min(100, score);
 }

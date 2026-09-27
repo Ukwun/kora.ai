@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export default function OnboardingFlow() {
   const router = useRouter();
@@ -11,6 +11,19 @@ export default function OnboardingFlow() {
   const [message, setMessage] = useState(
     "Let's get your business running.\n\nThis will only take about five minutes."
   );
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void fetch("/api/onboarding", { cache: "no-store" }).then((response) => response.json()).then((result) => {
+        if (result.profile && !result.complete) {
+          setCurrentStep(result.step ?? "business_type");
+          setProgress(result.progress ?? 0);
+        }
+      }).catch(() => setError("Could not load your saved setup. Try again."));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const businessTypes = [
     { id: "restaurant", label: "Restaurant" },
@@ -57,6 +70,7 @@ export default function OnboardingFlow() {
 
   async function handleNext(stepData: Record<string, unknown>) {
     setLoading(true);
+    setError("");
     try {
       const response = await fetch("/api/onboarding", {
         method: "POST",
@@ -79,11 +93,11 @@ export default function OnboardingFlow() {
           router.push("/dashboard");
         }
       } else {
-        alert("Error: " + (result.error || "Unknown error"));
+        setError(result.error || "Unable to save this step. Please try again.");
       }
     } catch (error) {
       console.error("Error:", error);
-      alert("An error occurred. Please try again.");
+      setError("A network error occurred. Your answers are still here; try again.");
     } finally {
       setLoading(false);
     }
@@ -153,6 +167,7 @@ export default function OnboardingFlow() {
             />
           )}
         </div>
+        {error && <p role="alert" className="mt-4 rounded-xl border border-rose-300/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">{error}</p>}
       </div>
     </div>
   );
@@ -168,9 +183,15 @@ function BusinessTypeStep({
   options: Array<{ id: string; label: string }>;
 }) {
   const [selected, setSelected] = useState("");
+  const [businessName, setBusinessName] = useState("");
+  const [industry, setIndustry] = useState("");
+  const [country, setCountry] = useState("Nigeria");
+  const [currency, setCurrency] = useState("NGN");
+  const [timezone, setTimezone] = useState("Africa/Lagos");
 
   return (
     <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2"><input required value={businessName} onChange={(event) => setBusinessName(event.target.value)} placeholder="Business name" className="rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none focus:border-violet-500" /><input required value={industry} onChange={(event) => setIndustry(event.target.value)} placeholder="Industry (e.g. consulting)" className="rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none focus:border-violet-500" /><select value={country} onChange={(event) => { const selectedCountry = event.target.value; const defaults: Record<string, { currency: string; timezone: string }> = { Nigeria: { currency: "NGN", timezone: "Africa/Lagos" }, Ghana: { currency: "GHS", timezone: "Africa/Accra" }, Kenya: { currency: "KES", timezone: "Africa/Nairobi" }, "South Africa": { currency: "ZAR", timezone: "Africa/Johannesburg" }, Other: { currency: "USD", timezone: "UTC" } }; setCountry(selectedCountry); setCurrency(defaults[selectedCountry].currency); setTimezone(defaults[selectedCountry].timezone); }} className="rounded-xl border border-white/10 bg-[#11111c] px-4 py-3 text-white"><option>Nigeria</option><option>Ghana</option><option>Kenya</option><option>South Africa</option><option>Other</option></select><select value={currency} onChange={(event) => setCurrency(event.target.value)} className="rounded-xl border border-white/10 bg-[#11111c] px-4 py-3 text-white"><option value="NGN">NGN · Nigerian naira</option><option value="GHS">GHS · Ghanaian cedi</option><option value="KES">KES · Kenyan shilling</option><option value="ZAR">ZAR · South African rand</option><option value="USD">USD · US dollar</option></select><input value={timezone} onChange={(event) => setTimezone(event.target.value)} placeholder="Timezone (e.g. Africa/Lagos)" className="rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none focus:border-violet-500 sm:col-span-2" /></div>
       <div className="grid grid-cols-2 gap-3">
         {options.map((opt) => (
           <button
@@ -187,8 +208,8 @@ function BusinessTypeStep({
         ))}
       </div>
       <button
-        onClick={() => onNext({ type: selected })}
-        disabled={!selected || loading}
+        onClick={() => onNext({ type: selected, businessName, industry, country, currency, timezone })}
+        disabled={!selected || !businessName.trim() || !industry.trim() || loading}
         className="w-full px-6 py-3 bg-violet-500 text-white rounded-xl font-semibold hover:bg-violet-400 disabled:opacity-50 transition-all"
       >
         {loading ? "Continuing..." : "Next"}
@@ -205,6 +226,8 @@ function EmployeesStep({
   loading: boolean;
 }) {
   const [value, setValue] = useState("");
+  const [customers, setCustomers] = useState("");
+  const [monthlyRevenueRange, setMonthlyRevenueRange] = useState("unknown");
 
   return (
     <div className="space-y-4">
@@ -215,8 +238,10 @@ function EmployeesStep({
         placeholder="Enter number of employees"
         className="w-full px-4 py-3 bg-slate-950 border border-white/10 rounded-xl text-white placeholder:text-slate-400 focus:border-violet-500 focus:outline-none"
       />
+      <input type="number" min="0" value={customers} onChange={(e) => setCustomers(e.target.value)} placeholder="Approximate customers per month" className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-white placeholder:text-slate-400 focus:border-violet-500 focus:outline-none" />
+      <select value={monthlyRevenueRange} onChange={(event) => setMonthlyRevenueRange(event.target.value)} className="w-full rounded-xl border border-white/10 bg-[#11111c] px-4 py-3 text-white"><option value="unknown">Monthly revenue range (prefer not to say)</option><option value="under_500k">Under 500,000 in selected currency</option><option value="500k_2m">500,000–2,000,000</option><option value="2m_10m">2,000,000–10,000,000</option><option value="over_10m">Over 10,000,000</option></select>
       <button
-        onClick={() => onNext({ employees: value })}
+        onClick={() => { onNext({ employees: value, customers: customers || "0", monthlyRevenueRange }); }}
         disabled={!value || loading}
         className="w-full px-6 py-3 bg-violet-500 text-white rounded-xl font-semibold hover:bg-violet-400 disabled:opacity-50 transition-all"
       >
@@ -265,6 +290,7 @@ function SoftwareStep({
   options: Array<{ id: string; label: string }>;
 }) {
   const [selected, setSelected] = useState<string[]>([]);
+  const [offerings, setOfferings] = useState("");
 
   const toggle = (id: string) => {
     setSelected((prev) =>
@@ -289,8 +315,9 @@ function SoftwareStep({
           </button>
         ))}
       </div>
+      <label className="block text-sm text-slate-300">What products or services do you offer?<input value={offerings} onChange={(event) => setOfferings(event.target.value)} placeholder="Separate a few examples with commas" className="mt-2 w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-white placeholder:text-slate-500 outline-none focus:border-violet-500" /></label>
       <button
-        onClick={() => onNext({ software: selected })}
+        onClick={() => onNext({ software: selected, offerings })}
         disabled={selected.length === 0 || loading}
         className="w-full px-6 py-3 bg-violet-500 text-white rounded-xl font-semibold hover:bg-violet-400 disabled:opacity-50 transition-all"
       >
@@ -310,6 +337,12 @@ function ChallengeStep({
   options: Array<{ id: string; label: string }>;
 }) {
   const [selected, setSelected] = useState("");
+  const [goals, setGoals] = useState<string[]>([]);
+  const [channels, setChannels] = useState<string[]>([]);
+  const [payments, setPayments] = useState<string[]>([]);
+  const [hours, setHours] = useState("Weekdays, 9am–5pm");
+  const [reports, setReports] = useState<string[]>(["weekly_summary"]);
+  const toggle = (values: string[], set: (next: string[]) => void, value: string) => set(values.includes(value) ? values.filter((item) => item !== value) : [...values, value]);
 
   return (
     <div className="space-y-4">
@@ -328,8 +361,12 @@ function ChallengeStep({
           </button>
         ))}
       </div>
+      <fieldset className="rounded-xl border border-white/10 p-4"><legend className="px-2 text-sm text-slate-300">What would you most like to achieve?</legend><div className="grid grid-cols-2 gap-2">{["grow_revenue", "win_customers", "improve_cash_flow", "deliver_projects", "organize_team", "save_time"].map((goal) => <label key={goal} className="flex items-center gap-2 text-xs text-slate-300"><input type="checkbox" checked={goals.includes(goal)} onChange={() => toggle(goals, setGoals, goal)} />{goal.replaceAll("_", " ")}</label>)}</div></fieldset>
+      <div className="grid gap-3 sm:grid-cols-2"><fieldset className="rounded-xl border border-white/10 p-4"><legend className="px-2 text-xs text-slate-300">Preferred channels</legend>{["email", "phone", "whatsapp"].map((item) => <label key={item} className="mr-3 inline-flex items-center gap-1 text-xs text-slate-400"><input type="checkbox" checked={channels.includes(item)} onChange={() => toggle(channels, setChannels, item)} />{item}</label>)}</fieldset><fieldset className="rounded-xl border border-white/10 p-4"><legend className="px-2 text-xs text-slate-300">Payment methods</legend>{["bank_transfer", "card", "cash", "mobile_money"].map((item) => <label key={item} className="mr-3 inline-flex items-center gap-1 text-xs text-slate-400"><input type="checkbox" checked={payments.includes(item)} onChange={() => toggle(payments, setPayments, item)} />{item.replace("_", " ")}</label>)}</fieldset></div>
+      <input value={hours} onChange={(event) => setHours(event.target.value)} placeholder="Business working hours" className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-white outline-none focus:border-violet-500" />
+      <fieldset className="rounded-xl border border-white/10 p-4"><legend className="px-2 text-xs text-slate-300">Reports to prepare</legend>{["weekly_summary", "monthly_finance", "project_status"].map((item) => <label key={item} className="mr-4 inline-flex items-center gap-2 text-xs text-slate-400"><input type="checkbox" checked={reports.includes(item)} onChange={() => toggle(reports, setReports, item)} />{item.replaceAll("_", " ")}</label>)}</fieldset>
       <button
-        onClick={() => onNext({ challenge: selected })}
+        onClick={() => onNext({ challenge: selected, goals, communicationChannels: channels, preferredPaymentMethods: payments, workingHours: hours, reportingPreferences: reports })}
         disabled={!selected || loading}
         className="w-full px-6 py-3 bg-violet-500 text-white rounded-xl font-semibold hover:bg-violet-400 disabled:opacity-50 transition-all"
       >

@@ -1,185 +1,60 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/session";
-import { findUserByEmail } from "@/lib/store";
-import { getBusinessProfile } from "@/lib/business-memory";
-import {
-  checkRateLimit,
-  getClientIP,
-  logAudit,
-  canAccessOrganization,
-  canPerformAction,
-  getSafeErrorMessage,
-} from "@/lib/security";
+import type { Customer, Invoice, Payment, Task } from "@/lib/store";
+import { listOrganizationRecords } from "@/lib/operations";
+import { canPerformAction, checkRateLimit } from "@/lib/security";
+
+const windows = {
+  week: (now: Date) => { const date = new Date(now); date.setHours(0, 0, 0, 0); date.setDate(date.getDate() - ((date.getDay() + 6) % 7)); return date; },
+  month: (now: Date) => new Date(now.getFullYear(), now.getMonth(), 1),
+  year: (now: Date) => new Date(now.getFullYear(), 0, 1),
+} as const;
 
 export async function GET(request: NextRequest) {
   const session = await getSessionFromRequest(request);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!canPerformAction(session, "view_reports") && !canPerformAction(session, "view_own_data") && !canPerformAction(session, "all_data_access")) return NextResponse.json({ error: "Insufficient permissions." }, { status: 403 });
+  if (!checkRateLimit(`analytics_${session.id}`, 60, 60)) return NextResponse.json({ error: "Too many requests." }, { status: 429 });
 
-  if (!session) {
-    await logAudit({
-      userId: "anonymous",
-      organizationId: "unknown",
-      action: "permission.denied",
-      resource: "analytics",
-      status: "failure",
-      details: { reason: "No session" },
-      ipAddress: getClientIP(request),
-    });
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  try {
-    // Rate limiting - 60 analytics requests per minute
-    const rateLimitKey = `analytics_${session.id}`;
-    if (!checkRateLimit(rateLimitKey, 60, 60)) {
-      await logAudit({
-        userId: session.id,
-        organizationId: session.organizationId,
-        action: "permission.denied",
-        resource: "analytics",
-        status: "failure",
-        details: { reason: "Rate limit exceeded" },
-        ipAddress: getClientIP(request),
-      });
-      return NextResponse.json(
-        { error: "Too many requests" },
-        { status: 429 }
-      );
-    }
-
-    // Verify organization access
-    if (!canAccessOrganization(session, session.organizationId)) {
-      await logAudit({
-        userId: session.id,
-        organizationId: session.organizationId,
-        action: "permission.denied",
-        resource: "analytics",
-        status: "failure",
-        details: { reason: "Organization access denied" },
-        ipAddress: getClientIP(request),
-      });
-      return NextResponse.json(
-        { error: "Access denied" },
-        { status: 403 }
-      );
-    }
-
-    // Check permission for viewing reports
-    if (!canPerformAction(session, "view_reports") && 
-        !canPerformAction(session, "view_own_data") &&
-        !canPerformAction(session, "all_data_access")) {
-      await logAudit({
-        userId: session.id,
-        organizationId: session.organizationId,
-        action: "permission.denied",
-        resource: "analytics",
-        status: "failure",
-        details: { reason: "Insufficient permissions" },
-        ipAddress: getClientIP(request),
-      });
-      return NextResponse.json(
-        { error: "Insufficient permissions" },
-        { status: 403 }
-      );
-    }
-
-    const user = await findUserByEmail(session.email);
-    if (!user) {
-      await logAudit({
-        userId: session.id,
-        organizationId: session.organizationId,
-        action: "error",
-        resource: "analytics",
-        status: "failure",
-        details: { reason: "User not found" },
-      });
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-
-    const profile = await getBusinessProfile(user.id, user.organizationId);
-    const metrics = profile?.metrics ?? [];
-    const revenueMetrics = metrics.filter((metric) => metric.name.toLowerCase().includes("revenue"));
-    const currentRevenue = Number(revenueMetrics.at(-1)?.value) || 0;
-    const previousRevenue = Number(revenueMetrics.at(-2)?.value) || 0;
-    const revenueGrowth = previousRevenue > 0
-      ? Math.round(((currentRevenue - previousRevenue) / previousRevenue) * 100)
-      : 0;
-    const connectedIntegrations = profile?.integrations.filter((integration) => integration.connected).length ?? 0;
-    const customerCount = profile?.customersPerMonth ?? 0;
-
-    const analytics = {
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-      },
-      organizationId: user.organizationId,
-      periods: {
-        week: {
-          revenue: currentRevenue,
-          customers: customerCount,
-          tasks: 0,
-          invoices: 0,
-          payments: 0,
-        },
-        month: {
-          revenue: currentRevenue,
-          customers: customerCount,
-          tasks: 0,
-          invoices: 0,
-          payments: 0,
-        },
-        year: {
-          revenue: currentRevenue,
-          customers: customerCount,
-          tasks: 0,
-          invoices: 0,
-          payments: 0,
-        },
-      },
-      trends: {
-        revenueGrowth,
-        customerGrowth: 0,
-        taskEfficiency: 0,
-        paymentHealth: 0,
-      },
-      topMetrics: {
-        avgInvoiceValue: 0,
-        paymentDaysOverdue: 0,
-        customerRetention: 0,
-        teamProductivity: 0,
-      },
-      bottlenecks: profile?.mainChallenge ? [`Primary focus: ${profile.mainChallenge.replace(/_/g, " ")}`] : [],
-      opportunities: connectedIntegrations === 0 ? ["Connect a business tool to start collecting live activity."] : [],
-    };
-
-    // Log successful analytics access
-    await logAudit({
-      userId: session.id,
-      organizationId: session.organizationId,
-      action: "data.read",
-      resource: "analytics",
-      status: "success",
-      ipAddress: getClientIP(request),
-    });
-
-    return NextResponse.json({ success: true, data: analytics });
-  } catch (error) {
-    console.error("Analytics error:", error);
-
-    await logAudit({
-      userId: session.id,
-      organizationId: session.organizationId,
-      action: "error",
-      resource: "analytics",
-      status: "failure",
-      details: { error: String(error) },
-      ipAddress: getClientIP(request),
-    });
-
-    return NextResponse.json(
-      { error: getSafeErrorMessage(error) },
-      { status: 500 }
-    );
-  }
+  const teamAccess = canPerformAction(session, "view_team_data") || canPerformAction(session, "all_data_access");
+  const [customerRows, taskRows, invoiceRows, paymentRows] = await Promise.all([
+    listOrganizationRecords<Customer>("customers", session.organizationId),
+    listOrganizationRecords<Task>("tasks", session.organizationId),
+    listOrganizationRecords<Invoice>("invoices", session.organizationId),
+    listOrganizationRecords<Payment>("payments", session.organizationId),
+  ]);
+  const customers = customerRows.filter((record) => teamAccess || record.createdBy === session.id);
+  const tasks = taskRows.filter((record) => teamAccess || record.createdBy === session.id || record.assignedTo === session.id);
+  const invoices = invoiceRows.filter((record) => teamAccess || record.createdBy === session.id);
+  const payments = paymentRows.filter((payment) => teamAccess || invoices.some((invoice) => invoice.id === payment.invoiceId));
+  const now = new Date();
+  const periods = Object.fromEntries(Object.entries(windows).map(([name, startOf]) => {
+    const start = startOf(now);
+    const relevantPayments = payments.filter((payment) => payment.status === "received" && payment.receivedAt && new Date(payment.receivedAt) >= start && new Date(payment.receivedAt) <= now);
+    const relevantCustomers = customers.filter((customer) => new Date(customer.createdAt) >= start && new Date(customer.createdAt) <= now);
+    const relevantTasks = tasks.filter((task) => new Date(task.createdAt) >= start && new Date(task.createdAt) <= now);
+    const relevantInvoices = invoices.filter((invoice) => new Date(invoice.createdAt) >= start && new Date(invoice.createdAt) <= now);
+    return [name, { revenue: relevantPayments.length ? relevantPayments.reduce((sum, payment) => sum + Number(payment.amount), 0) : null, customers: relevantCustomers.length, tasks: relevantTasks.length, invoices: relevantInvoices.length, payments: relevantPayments.length, coverage: { payments: relevantPayments.length > 0, customers: true, tasks: true, invoices: true } }];
+  }));
+  const paidInvoices = invoices.filter((invoice) => invoice.status === "paid");
+  const overdue = invoices.filter((invoice) => !["paid", "cancelled", "draft"].includes(invoice.status) && invoice.dueAt && new Date(invoice.dueAt) < now);
+  const analytics = {
+    organizationId: session.organizationId,
+    generatedAt: now.toISOString(),
+    periods,
+    trends: { revenueGrowth: null, customerGrowth: null, taskEfficiency: null, paymentHealth: null },
+    topMetrics: {
+      avgInvoiceValue: paidInvoices.length ? paidInvoices.reduce((sum, invoice) => sum + Number(invoice.amount), 0) / paidInvoices.length : null,
+      overdueInvoiceCount: overdue.length,
+      overdueInvoiceValue: overdue.reduce((sum, invoice) => sum + Number(invoice.amount), 0),
+      averageDaysOverdue: overdue.length ? Math.round(overdue.reduce((sum, invoice) => sum + Math.floor((now.getTime() - new Date(invoice.dueAt as string).getTime()) / 86_400_000), 0) / overdue.length) : null,
+      customerRetention: null,
+      teamProductivity: null,
+    },
+    activeCustomers: customers.filter((customer) => customer.status === "active").length,
+    openTasks: tasks.filter((task) => task.status !== "done").length,
+    paidInvoiceCount: paidInvoices.length,
+    dataLimits: ["Revenue uses received payment records with a receivedAt date; trend comparisons, retention, and productivity are not calculated from available records."],
+  };
+  return NextResponse.json({ success: true, data: analytics }, { headers: { "Cache-Control": "private, no-store, max-age=0" } });
 }

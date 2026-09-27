@@ -78,6 +78,20 @@ export type BusinessProfile = {
   id: string;
   userId: string;
   organizationId: string;
+  businessName?: string;
+  industry?: string;
+  country?: string;
+  currency?: string;
+  timezone?: string;
+  monthlyRevenueRange?: string;
+  offerings?: string[];
+  goals?: string[];
+  communicationChannels?: string[];
+  preferredPaymentMethods?: string[];
+  workingHours?: string;
+  reportingPreferences?: string[];
+  profileSource?: "onboarding" | "user_updated" | "verified_record";
+  profileUpdatedAt?: string;
   type: BusinessType;
   employees: number;
   customersPerMonth: number;
@@ -95,7 +109,6 @@ export type BusinessProfile = {
   metrics: BusinessMetric[];
   memoryNodes: BusinessMemoryNode[];
   behaviorPatterns: {
-    invoiceCycle?: number; // Average days between invoices
     paymentCycle?: number; // Average days to get paid
     customerRetention?: number; // Percentage
     productPopularity?: { product: string; sales: number }[];

@@ -11,8 +11,8 @@ export async function GET(request: NextRequest) {
   const session = await getSessionFromRequest(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const database = await readDatabase();
-  const members = database.users.filter((user) => user.organizationId === session.organizationId).map(({ passwordHash, ...user }) => user);
-  const invites = database.memberships.filter((member) => member.organizationId === session.organizationId && member.status === "invited").map(({ token, ...invite }) => invite);
+  const members = database.users.filter((user) => user.organizationId === session.organizationId && user.accountStatus !== "suspended").map((user) => Object.fromEntries(Object.entries(user).filter(([key]) => key !== "passwordHash")));
+  const invites = database.memberships.filter((member) => member.organizationId === session.organizationId && member.status === "invited").map((member) => Object.fromEntries(Object.entries(member).filter(([key]) => key !== "token")));
   return NextResponse.json({ success: true, data: { members, invites } });
 }
 
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Enter a valid email and role." }, { status: 400 });
   const database = await readDatabase();
-  const activeSeats = database.users.filter((user) => user.organizationId === session.organizationId).length + database.memberships.filter((member) => member.organizationId === session.organizationId && member.status === "invited").length;
+  const activeSeats = database.users.filter((user) => user.organizationId === session.organizationId && user.accountStatus !== "suspended").length + database.memberships.filter((member) => member.organizationId === session.organizationId && member.status === "invited").length;
   const subscription = database.billingSubscriptions.find((entry) => entry.organizationId === session.organizationId);
   const seatLimit = subscription?.seatLimit ?? 12;
   if (activeSeats >= seatLimit) return NextResponse.json({ error: "Your plan has no available seats." }, { status: 409 });
