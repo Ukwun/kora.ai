@@ -10,7 +10,6 @@ import {
   checkRateLimit,
   getClientIP,
   logAudit,
-  canAccessOrganization,
   canPerformAction,
   sanitizeInput,
   getSafeErrorMessage,
@@ -53,40 +52,6 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // Verify organization access
-    if (!canAccessOrganization(session, session.organizationId)) {
-      await logAudit({
-        userId: session.id,
-        organizationId: session.organizationId,
-        action: "permission.denied",
-        resource: "ai",
-        status: "failure",
-        details: { reason: "Organization access denied" },
-        ipAddress: getClientIP(request),
-      });
-      return NextResponse.json(
-        { error: "Access denied" },
-        { status: 403 }
-      );
-    }
-
-    // Check permission for AI access
-    if (!canPerformAction(session, "all_data_access")) {
-      await logAudit({
-        userId: session.id,
-        organizationId: session.organizationId,
-        action: "permission.denied",
-        resource: "ai",
-        status: "failure",
-        details: { reason: "Insufficient permissions" },
-        ipAddress: getClientIP(request),
-      });
-      return NextResponse.json(
-        { error: "Insufficient permissions for AI features" },
-        { status: 403 }
-      );
-    }
-
     const body = await request.json();
     const { action: requestedAction, messages } = body as {
       action: "recommendations" | "insights" | "analyze" | "chat";
@@ -107,6 +72,15 @@ export async function POST(request: NextRequest) {
         details: { reason: "User not found" },
       });
       return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    if (user.id !== session.id || user.organizationId !== session.organizationId) {
+      await logAudit({ userId: session.id, organizationId: session.organizationId, action: "permission.denied", resource: "ai", status: "failure", details: { reason: "The current account or workspace no longer matches this session." }, ipAddress: getClientIP(request) });
+      return NextResponse.json({ error: "Your active workspace membership could not be verified." }, { status: 403 });
+    }
+    if (!canPerformAction(user, "all_data_access")) {
+      await logAudit({ userId: user.id, organizationId: user.organizationId, action: "permission.denied", resource: "ai", status: "failure", details: { reason: "Insufficient permissions" }, ipAddress: getClientIP(request) });
+      return NextResponse.json({ error: "Insufficient permissions for AI features" }, { status: 403 });
     }
 
     const organization = await findOrganizationById(user.organizationId);
