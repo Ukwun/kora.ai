@@ -1,7 +1,9 @@
 import { query, postgresEnabled } from "./db";
 import { readDatabase } from "./store";
+import { isFirebaseAdminConfigured } from "./firebase-admin";
+import { searchBusinessMemoryRecords, type BusinessMemoryRecord } from "./business-memory-records";
 
-export type AIIntent = "repurchase_candidates" | "unsupported";
+export type AIIntent = "repurchase_candidates" | "business_memory" | "unsupported";
 
 export type RepurchaseCandidate = {
   customerId: string;
@@ -21,6 +23,8 @@ export type IntelligenceResult = {
   generatedAt: string;
   candidates: RepurchaseCandidate[];
   dataNotice?: string;
+  memoryRecords?: Array<{ record: BusinessMemoryRecord; matchedTerms: string[] }>;
+  sources?: Array<{ id: string; entityType: string; title: string; source: string; verificationStatus: string; updatedAt: string }>;
 };
 
 export function detectBusinessIntent(question: string): AIIntent {
@@ -28,7 +32,7 @@ export function detectBusinessIntent(question: string): AIIntent {
   if (/buy again|purchase again|repurchase|returning customer|likely to buy/.test(normalized)) {
     return "repurchase_candidates";
   }
-  return "unsupported";
+  return "business_memory";
 }
 
 export async function getRepurchaseCandidates(organizationId: string): Promise<RepurchaseCandidate[]> {
@@ -131,6 +135,20 @@ export async function answerBusinessQuestion(organizationId: string, question: s
   const intent = detectBusinessIntent(question);
   if (intent === "unsupported") {
     return { intent, generatedAt: new Date().toISOString(), candidates: [], dataNotice: "Kora can currently answer repurchase-candidate questions from confirmed customer, invoice, and payment records." };
+  }
+  if (intent === "business_memory") {
+    if (!isFirebaseAdminConfigured()) {
+      return { intent, generatedAt: new Date().toISOString(), candidates: [], dataNotice: "Structured business memory is not connected to Firebase for this deployment yet." };
+    }
+    const memoryRecords = await searchBusinessMemoryRecords(organizationId, question);
+    return {
+      intent,
+      generatedAt: new Date().toISOString(),
+      candidates: [],
+      memoryRecords: memoryRecords.map(({ record, matchedTerms }) => ({ record, matchedTerms })),
+      sources: memoryRecords.map(({ record }) => ({ id: record.id, entityType: record.entityType, title: record.title, source: record.source, verificationStatus: record.verificationStatus, updatedAt: record.updatedAt })),
+      dataNotice: memoryRecords.length ? undefined : "No matching business memory records were found. Add a confirmed note or connect a supported data source.",
+    };
   }
   const candidates = await getRepurchaseCandidates(organizationId);
   return {

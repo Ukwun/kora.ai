@@ -3,6 +3,8 @@ import path from "path";
 import bcrypt from "bcryptjs";
 import type { BusinessProfile } from "./business-profile";
 import { postgresEnabled, query, withTransaction } from "./db";
+import { isFirebaseAdminConfigured } from "./firebase-admin";
+import { recordStructuredEntityMemory } from "./business-memory-records";
 
 export type UserRole = "owner" | "admin" | "manager" | "employee";
 
@@ -409,5 +411,28 @@ export async function saveBusinessProfile(profile: BusinessProfile) {
   }
 
   await writeDatabase(db);
+  if (isFirebaseAdminConfigured()) {
+    try {
+      await recordStructuredEntityMemory({
+        organizationId: profile.organizationId,
+        createdBy: profile.userId,
+        entityType: "organization_profile",
+        entityId: profile.id,
+        title: "Business profile",
+        summary: `${profile.type} business · ${profile.employees} employees · focus: ${profile.mainChallenge.replace(/_/g, " ")}`,
+        data: {
+          type: profile.type,
+          employees: profile.employees,
+          customersPerMonth: profile.customersPerMonth,
+          software: profile.existingSoftware,
+          mainChallenge: profile.mainChallenge,
+          integrations: profile.integrations.map(({ type, connected, connectedAt }) => ({ type, connected, connectedAt })),
+          onboardingComplete: profile.onboardingComplete,
+        },
+      });
+    } catch (error) {
+      console.error("Unable to mirror the saved business profile into Firebase memory.", error);
+    }
+  }
   return profile;
 }

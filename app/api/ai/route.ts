@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/session";
 import { findUserByEmail, findOrganizationById } from "@/lib/store";
-import { AIEngine, type AIContext, type AIMessage } from "@/lib/ai";
+import { AIEngine, type AIMessage } from "@/lib/ai";
 import { answerBusinessQuestion } from "@/lib/ai-intelligence";
+import { buildAuthorizedAIContext } from "@/lib/ai-context";
+import { isFirebaseAdminConfigured } from "@/lib/firebase-admin";
+import { createBusinessMemoryRecord } from "@/lib/business-memory-records";
 import {
   checkRateLimit,
   getClientIP,
@@ -85,10 +88,9 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { action: requestedAction, messages, context } = body as {
+    const { action: requestedAction, messages } = body as {
       action: "recommendations" | "insights" | "analyze" | "chat";
       messages?: AIMessage[];
-      context?: Partial<AIContext>;
     };
 
     // Sanitize action input
@@ -120,19 +122,34 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Organization not found" }, { status: 404 });
     }
 
-    const fullContext: AIContext = {
-      user,
-      organization,
-      recentActivity: context?.recentActivity || [],
-      memoryNodes: context?.memoryNodes || [],
-      metrics: context?.metrics || { revenue: 0, customers: 0, tasks: 0, retention: 0 },
-    };
+    const fullContext = await buildAuthorizedAIContext(user, organization);
 
     let result;
 
     switch (action) {
       case "recommendations":
-        result = await aiEngine.generateRecommendations(fullContext);
+        {
+          const recommendations = await aiEngine.generateRecommendations(fullContext);
+          if (!isFirebaseAdminConfigured()) {
+            result = recommendations.map((recommendation) => ({ ...recommendation, requiresApproval: true, persistence: "not_configured" }));
+            break;
+          }
+          result = await Promise.all(recommendations.map(async (recommendation) => {
+            const record = await createBusinessMemoryRecord({
+              organizationId: user.organizationId,
+              createdBy: user.id,
+              entityType: "ai_recommendation",
+              title: recommendation.title,
+              summary: recommendation.summary,
+              data: { action: recommendation.action, category: recommendation.category, intensity: recommendation.intensity, evidence: fullContext.evidence },
+              status: "pending_approval",
+              source: "system_calculation",
+              verificationStatus: "unverified",
+              tags: ["ai_recommendation", recommendation.category],
+            });
+            return { ...recommendation, id: record.id, requiresApproval: true, persistence: "stored" };
+          }));
+        }
         break;
 
       case "insights":
@@ -152,7 +169,7 @@ export async function POST(request: NextRequest) {
         if (!question || question.length > 2_000) {
           return NextResponse.json({ error: "Enter a business question of up to 2,000 characters." }, { status: 400 });
         }
-        const intelligence = await answerBusinessQuestion(session.organizationId, question);
+        const intelligence = await answerBusinessQuestion(user.organizationId, question);
         if (intelligence.intent === "unsupported") {
           result = intelligence;
           break;
@@ -162,11 +179,11 @@ export async function POST(request: NextRequest) {
           candidates: intelligence.candidates,
           dataNotice: intelligence.dataNotice,
         });
-        const groundedContext: AIContext = {
+        const groundedContext = {
           ...fullContext,
           recentActivity: [],
           memoryNodes: [],
-          metrics: { revenue: 0, customers: 0, tasks: 0, retention: 0 },
+          metrics: { revenue: 0, customers: 0, tasks: 0, retention: null },
         };
         const response = await aiEngine.chat([
           {

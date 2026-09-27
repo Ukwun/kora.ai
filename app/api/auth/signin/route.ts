@@ -48,7 +48,7 @@ export async function POST(request: Request) {
       role: user.role,
       organizationId: user.organizationId,
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Sign-in failed." }, { status: 500 });
   }
 }

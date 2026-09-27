@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createHmac, timingSafeEqual } from "node:crypto";
 
 export type SessionUser = {
   id: string;
@@ -6,6 +7,10 @@ export type SessionUser = {
   email: string;
   role: string;
   organizationId: string;
+};
+
+type SessionPayload = SessionUser & {
+  expiresAt: number;
 };
 
 const cookieName = "kora_session";
@@ -21,19 +26,7 @@ function getSessionSecret() {
 }
 
 async function signValue(value: string) {
-  const textEncoder = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey(
-    "raw",
-    textEncoder.encode(getSessionSecret()),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-
-  const signature = await crypto.subtle.sign("HMAC", keyMaterial, textEncoder.encode(value));
-  return Array.from(new Uint8Array(signature))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
+  return createHmac("sha256", getSessionSecret()).update(value).digest("hex");
 }
 
 function encodeBase64Url(value: string) {
@@ -44,34 +37,37 @@ function decodeBase64Url(value: string) {
   return Buffer.from(value, "base64url").toString("utf-8");
 }
 
-async function encodeSession(payload: SessionUser) {
+async function encodeSession(payload: SessionPayload) {
   const raw = JSON.stringify(payload);
   return `${encodeBase64Url(raw)}.${await signValue(raw)}`;
 }
 
-async function decodeSession(rawValue: string) {
+async function decodeSession(rawValue: string): Promise<SessionUser | null> {
   const [encoded, sig] = rawValue.split(".");
   if (!encoded || !sig) return null;
 
   try {
     const decoded = decodeBase64Url(encoded);
-    const payload = JSON.parse(decoded) as SessionUser;
+    const payload = JSON.parse(decoded) as SessionPayload;
     const expected = await signValue(decoded);
-    if (sig !== expected) return null;
-    return payload;
+    const expectedBuffer = Buffer.from(expected, "utf8");
+    const signatureBuffer = Buffer.from(sig, "utf8");
+    if (signatureBuffer.length !== expectedBuffer.length || !timingSafeEqual(signatureBuffer, expectedBuffer) || !payload.expiresAt || payload.expiresAt <= Date.now()) return null;
+    return { id: payload.id, name: payload.name, email: payload.email, role: payload.role, organizationId: payload.organizationId };
   } catch {
     return null;
   }
 }
 
 export async function setSessionCookie(response: NextResponse, user: SessionUser) {
-  const value = await encodeSession(user);
+  const maxAge = 60 * 60 * 24 * 7;
+  const value = await encodeSession({ ...user, expiresAt: Date.now() + maxAge * 1000 });
   response.cookies.set(cookieName, value, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: 60 * 60 * 24 * 7,
+    maxAge,
   });
   return response;
 }

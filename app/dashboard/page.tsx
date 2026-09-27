@@ -1,413 +1,137 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
-interface BusinessProfile {
-  onboardingStep: string;
-  onboardingComplete: boolean;
-  type: string;
-  employees: number;
-  customersPerMonth: number;
-  mainChallenge: string;
-  integrations: Array<{ type: string; connected: boolean }>;
-  memoryNodes: Array<{ title: string; content: string }>;
-}
+type Role = "owner" | "admin" | "manager" | "employee";
+type Customer = { id: string; name: string; email?: string; status: string; createdAt: string };
+type Task = { id: string; title: string; status: string; priority: string; createdAt: string };
+type Invoice = { id: string; number: string; amount: number; currency?: string; status: string; dueAt?: string; createdAt: string };
+type Activity = { id: string; type: string; createdAt: string };
+type MemoryRecord = { id: string; entityType: string; title: string; summary: string; status: string; source: string; verificationStatus: string; createdAt: string; data: Record<string, unknown> };
+type Profile = { onboardingComplete: boolean; type: string; employees: number; mainChallenge: string; memoryNodes: Array<{ id: string; title: string; content: string }> };
+type Action = "customer" | "task" | "invoice" | null;
+type Briefing = {
+  generatedAt: string;
+  items: Array<{ id: string; level: "urgent" | "attention" | "positive"; title: string; detail: string; action?: "invoices" | "tasks" | "customers" }>;
+  emptyMessage: string;
+  weekly: { revenueRecorded: number; invoicesCreated: number; outstandingInvoices: number; newCustomers: number; tasksCompleted: number; tasksCreated: number; tasksDelayed: number; unavailableMetrics: string[] };
+};
 
-function calculateHealth(profile: BusinessProfile): number {
-  let score = 50;
-  if (profile.onboardingComplete) score += 10;
-  score += Math.min(20, (profile.employees || 0) / 10);
-  const connectedIntegrations = profile.integrations?.filter((integration) => integration.connected).length || 0;
-  score += Math.min(20, connectedIntegrations * 5);
-  return Math.min(100, score);
-}
+const titleCase = (value: string) => value.replace(/[._-]/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+const money = (value: number) => new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 }).format(value);
 
 export default function DashboardPage() {
-  const [user, setUser] = useState<{ name: string; email: string; role: string } | null>(null);
-  const [profile, setProfile] = useState<BusinessProfile | null>(null);
-  const [tenant, setTenant] = useState<{
-    organizationId: string;
-    plan: string;
-    billing: { monthlyPrice: number; seats: number; status: string; nextBillingDate: string };
-    memberships: Array<{ id: string; userId: string; role: string; status: string }>;
-    integrations: Array<{ type: string; connected: boolean; connectedAt?: string }>; 
-  } | null>(null);
-  const [health, setHealth] = useState(0);
-  const [activity, setActivity] = useState<Array<{ id: string; type: string; createdAt: string; payload: Record<string, unknown> }>>([]);
-  const [action, setAction] = useState<"customer" | "task" | "invoice" | null>(null);
-  const [form, setForm] = useState({ name: "", email: "", title: "", number: "", amount: "" });
-  const [actionStatus, setActionStatus] = useState("");
-  const [checkinOpen, setCheckinOpen] = useState(false);
-  const [checkinType, setCheckinType] = useState("nothing_significant");
-  const [checkinNote, setCheckinNote] = useState("");
-  const [checkinStatus, setCheckinStatus] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const [user, setUser] = useState<{ name: string; role: Role } | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [activity, setActivity] = useState<Activity[]>([]);
+  const [briefing, setBriefing] = useState<Briefing | null>(null);
+  const [memoryRecords, setMemoryRecords] = useState<MemoryRecord[]>([]);
+  const [action, setAction] = useState<Action>(null);
+  const [notice, setNotice] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ name: "", email: "", title: "", number: "", amount: "" });
+  const [checkinOpen, setCheckinOpen] = useState(false);
+  const [checkin, setCheckin] = useState({ type: "nothing_significant", note: "" });
 
-  useEffect(() => {
-    const loadWorkspace = async () => {
-      try {
-        // Get workspace data
-        const workspaceResponse = await fetch("/api/workspace", { cache: "no-store" });
-        if (!workspaceResponse.ok) {
-          router.push("/");
-          return;
-        }
-
-        const workspaceData = await workspaceResponse.json();
-        setUser(workspaceData.user);
-
-        // Get business profile
-        const profileResponse = await fetch("/api/onboarding");
-        const profileData = await profileResponse.json();
-
-        const tenantResponse = await fetch("/api/tenant", { cache: "no-store" });
-        const tenantData = tenantResponse.ok ? await tenantResponse.json() : null;
-        const activityResponse = await fetch("/api/activity", { cache: "no-store" });
-        const activityData = activityResponse.ok ? await activityResponse.json() : null;
-
-        // If onboarding not complete, redirect
-        if (!profileData.complete && !profileData.profile?.onboardingComplete) {
-          router.push("/onboarding");
-          return;
-        }
-
-        setProfile(profileData.profile);
-        setTenant(tenantData?.data ?? tenantData ?? null);
-        setActivity(activityData?.data ?? []);
-        setHealth(calculateHealth(profileData.profile));
-      } catch (error) {
-        console.error("Error loading workspace:", error);
-        router.push("/");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadWorkspace();
+  const load = useCallback(async () => {
+    const responses = await Promise.all(["workspace", "onboarding", "customers", "tasks", "invoices", "activity", "briefing", "memory"].map((route) => fetch(`/api/${route}`, { cache: "no-store" })));
+    if (!responses[0].ok) return router.replace("/");
+    const [workspace, onboarding, customerData, taskData, invoiceData, activityData, briefingData, memoryData] = await Promise.all(responses.map((response) => response.json()));
+    if (!onboarding.complete && !onboarding.profile?.onboardingComplete) return router.replace("/onboarding");
+    setUser(workspace.user); setProfile(onboarding.profile); setCustomers(customerData.data ?? []); setTasks(taskData.data ?? []); setInvoices(invoiceData.data ?? []); setActivity(activityData.data ?? []); setBriefing(responses[6].ok ? briefingData.data : null); setMemoryRecords(responses[7].ok ? memoryData.data ?? [] : []);
   }, [router]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void load().catch(() => router.replace("/")).finally(() => setLoading(false)); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [load, router]);
 
-  const openAction = (nextAction: "customer" | "task" | "invoice") => {
-    setAction(nextAction);
-    setActionStatus("");
-    setForm({ name: "", email: "", title: "", number: "", amount: "" });
-  };
-
-  const submitAction = async () => {
+  const canManage = user?.role === "owner" || user?.role === "admin" || user?.role === "manager";
+  const canInvoice = user?.role === "owner" || user?.role === "admin";
+  const openInvoices = invoices.filter((invoice) => !["paid", "cancelled"].includes(invoice.status));
+  const outstanding = openInvoices.reduce((sum, invoice) => sum + Number(invoice.amount || 0), 0);
+  function openAction(next: Exclude<Action, null>) { setAction(next); setNotice(""); setForm({ name: "", email: "", title: "", number: "", amount: "" }); }
+  async function saveAction() {
     if (!action) return;
-    setSaving(true);
-    setActionStatus("");
-    const endpoint = action === "customer" ? "/api/customers" : action === "task" ? "/api/tasks" : "/api/invoices";
-    const body = action === "customer"
-      ? { name: form.name, email: form.email }
-      : action === "task"
-        ? { title: form.title, priority: "medium" }
-        : { number: form.number, amount: form.amount };
-
+    const body = action === "customer" ? { name: form.name, email: form.email || undefined } : action === "task" ? { title: form.title, priority: "medium" } : { number: form.number, amount: form.amount };
+    setSaving(true); setNotice("");
     try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Unable to save this record.");
-      const activityResponse = await fetch("/api/activity", { cache: "no-store" });
-      const activityData = activityResponse.ok ? await activityResponse.json() : null;
-      setActivity(activityData?.data ?? []);
-      setActionStatus(`${action[0].toUpperCase()}${action.slice(1)} created successfully.`);
-      setForm({ name: "", email: "", title: "", number: "", amount: "" });
-    } catch (error) {
-      setActionStatus(error instanceof Error ? error.message : "Unable to save this record.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const submitCheckin = async () => {
-    setSaving(true);
-    setCheckinStatus("");
+      const route = action === "customer" ? "customers" : action === "task" ? "tasks" : "invoices";
+      const response = await fetch(`/api/${route}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const result = await response.json(); if (!response.ok) throw new Error(result.error || "Unable to save this record.");
+      setAction(null); setNotice(`${titleCase(action)} created and added to your operating picture.`); await load();
+    } catch (error) { setNotice(error instanceof Error ? error.message : "Unable to save this record."); } finally { setSaving(false); }
+  }
+  async function saveCheckin() {
+    setSaving(true); setNotice("");
     try {
-      const response = await fetch("/api/checkins", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: checkinType, note: checkinNote }) });
+      const response = await fetch("/api/checkins", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(checkin) });
+      const result = await response.json(); if (!response.ok) throw new Error(result.error || "Unable to save your update.");
+      setCheckinOpen(false); setCheckin({ type: "nothing_significant", note: "" }); setNotice("Your update is now part of Kora's business memory."); await load();
+    } catch (error) { setNotice(error instanceof Error ? error.message : "Unable to save your update."); } finally { setSaving(false); }
+  }
+  async function refreshRecommendations() {
+    setSaving(true); setNotice("");
+    try {
+      const response = await fetch("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "recommendations" }) });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Unable to save your update.");
-      setCheckinStatus("Saved to Kora's business memory.");
-      setCheckinNote("");
-      const profileResponse = await fetch("/api/onboarding", { cache: "no-store" });
-      const profileData = await profileResponse.json();
-      if (profileResponse.ok) setProfile(profileData.profile);
-    } catch (error) {
-      setCheckinStatus(error instanceof Error ? error.message : "Unable to save your update.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#07070f] flex items-center justify-center">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-violet-500 mb-4" />
-          <p className="text-slate-300">Loading your business...</p>
-        </div>
-      </div>
-    );
+      if (!response.ok) throw new Error(result.error || "Unable to review current records.");
+      const notStored = Array.isArray(result.data) && result.data.some((recommendation: { persistence?: string }) => recommendation.persistence === "not_configured");
+      if (notStored) setNotice("Recommendations were calculated, but durable approval history needs Firebase credentials configured in this deployment.");
+      else setNotice(result.data.length ? "Record-based recommendations are ready for your review." : "No urgent recommendations were found in the records Kora can currently access.");
+      await load();
+    } catch (error) { setNotice(error instanceof Error ? error.message : "Unable to review current records."); } finally { setSaving(false); }
   }
-
-  if (!user || !profile) {
-    return (
-      <div className="min-h-screen bg-[#07070f] flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-slate-300 mb-4">Unable to load profile</p>
-          <button
-            onClick={() => router.push("/onboarding")}
-            className="px-4 py-2 bg-violet-500 text-white rounded-lg hover:bg-violet-400"
-          >
-            Start Onboarding
-          </button>
-        </div>
-      </div>
-    );
+  async function decideRecommendation(id: string, status: "approved" | "rejected") {
+    setSaving(true); setNotice("");
+    try {
+      const response = await fetch(`/api/memory?id=${encodeURIComponent(id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Unable to record this decision.");
+      setNotice(status === "approved" ? "Approval recorded. No external action was executed." : "Rejection recorded in business memory."); await load();
+    } catch (error) { setNotice(error instanceof Error ? error.message : "Unable to record this decision."); } finally { setSaving(false); }
   }
+  async function signOut() { await fetch("/api/auth/logout", { method: "POST" }); router.replace("/"); router.refresh(); }
 
-  return (
-    <div className="min-h-screen bg-[#07070f] text-white">
-      {/* Header */}
-      <div className="border-b border-white/10 bg-linear-to-b from-violet-500/5 to-transparent">
-        <div className="max-w-7xl mx-auto px-6 py-8">
-          <div className="flex justify-between items-start">
-            <div>
-              <h1 className="text-4xl font-bold mb-2">Dashboard</h1>
-              <p className="text-slate-400">Welcome to your Business Operating System</p>
-            </div>
-            <div className="text-right">
-              <div className="text-3xl font-bold text-violet-400">{health}%</div>
-              <div className="text-sm text-slate-400">Business Health</div>
-            </div>
-          </div>
-          <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-violet-400/20 bg-violet-500/10 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div><p className="font-medium text-white">Good morning, {user.name.split(" ")[0]}.</p><p className="mt-1 text-sm text-slate-300">Did anything important happen yesterday? A small update keeps Kora&apos;s operating memory current.</p></div>
-            <button type="button" onClick={() => { setCheckinOpen(true); setCheckinStatus(""); }} className="shrink-0 rounded-lg bg-violet-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-400">Add update</button>
-          </div>
-        </div>
-      </div>
+  if (loading) return <main className="grid min-h-screen place-items-center bg-[#07070f] text-slate-300"><div className="text-center"><div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-2 border-violet-400 border-t-transparent" /><p>Loading your workspace…</p></div></main>;
+  if (!user || !profile) return null;
+  const actions = [{ label: "Add customer", detail: "Capture a new relationship", enabled: canManage, click: () => openAction("customer") }, { label: "Create task", detail: "Keep work moving", enabled: true, click: () => openAction("task") }, { label: "Create invoice", detail: "Start a billing record", enabled: canInvoice, click: () => openAction("invoice") }, { label: "Business update", detail: "Keep Kora current", enabled: true, click: () => setCheckinOpen(true) }];
+  const metrics = [["Customers", String(customers.length), "Relationships in your workspace"], ["Open tasks", String(tasks.filter((task) => task.status !== "done").length), "Work that needs attention"], ["Open invoices", String(openInvoices.length), `${money(outstanding)} outstanding`], ["Business memory", String(profile.memoryNodes.length + memoryRecords.length), "Structured notes and record links"]];
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
-        {/* Business Profile Overview */}
-        <div className="grid md:grid-cols-2 gap-6">
-          <div className="p-6 rounded-2xl border border-violet-500/20 bg-violet-500/5 hover:border-violet-500/40 transition-all">
-            <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
-              <span>📊</span> Your Business Profile
-            </h2>
-            <div className="space-y-4">
-              <div className="flex justify-between items-center pb-4 border-b border-white/10">
-                <span className="text-slate-400">Business Type</span>
-                <span className="text-white font-semibold capitalize">{profile.type}</span>
-              </div>
-              <div className="flex justify-between items-center pb-4 border-b border-white/10">
-                <span className="text-slate-400">Team Size</span>
-                <span className="text-white font-semibold">{profile.employees} {profile.employees === 1 ? "person" : "people"}</span>
-              </div>
-              <div className="flex justify-between items-center pb-4 border-b border-white/10">
-                <span className="text-slate-400">Monthly Customers</span>
-                <span className="text-white font-semibold">{profile.customersPerMonth}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-400">Main Challenge</span>
-                <span className="text-white font-semibold capitalize">{profile.mainChallenge.replace(/_/g, " ")}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="p-6 rounded-2xl border border-violet-500/20 bg-violet-500/5 hover:border-violet-500/40 transition-all">
-            <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
-              <span>🏢</span> Workspace & Plan
-            </h2>
-            <div className="space-y-4">
-              <div className="flex justify-between items-center pb-4 border-b border-white/10">
-                <span className="text-slate-400">Plan</span>
-                <span className="text-white font-semibold capitalize">{tenant?.plan ?? "Growth"}</span>
-              </div>
-              <div className="flex justify-between items-center pb-4 border-b border-white/10">
-                <span className="text-slate-400">Seats</span>
-                <span className="text-white font-semibold">{tenant?.billing?.seats ?? "-"}</span>
-              </div>
-              <div className="flex justify-between items-center pb-4 border-b border-white/10">
-                <span className="text-slate-400">Monthly spend</span>
-                <span className="text-white font-semibold">{tenant?.billing ? `₦${tenant.billing.monthlyPrice.toLocaleString()}` : "-"}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-400">Org ID</span>
-                <span className="text-white font-semibold text-xs">{tenant?.organizationId ?? "-"}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid md:grid-cols-2 gap-6">
-          <div className="p-6 rounded-2xl border border-violet-500/20 bg-violet-500/5 hover:border-violet-500/40 transition-all">
-            <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
-              <span>👥</span> Team Access
-            </h2>
-            <div className="space-y-2">
-              {(tenant?.memberships ?? []).length > 0 ? (
-                tenant?.memberships.map((member) => (
-                  <div key={member.id} className="flex items-center justify-between p-3 rounded-lg bg-slate-950/50 border border-white/5">
-                    <span className="text-slate-300 capitalize">{member.role}</span>
-                    <span className={`text-xs font-semibold ${member.status === "active" ? "text-green-400" : "text-amber-300"}`}>
-                      {member.status}
-                    </span>
-                  </div>
-                ))
-              ) : (
-                <p className="text-slate-400 text-sm">No team members assigned yet.</p>
-              )}
-            </div>
-          </div>
-
-          {/* Integrations & Learning */}
-          <div className="p-6 rounded-2xl border border-violet-500/20 bg-violet-500/5 hover:border-violet-500/40 transition-all">
-            <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
-              <span>🔗</span> Connected Tools
-            </h2>
-            <div className="space-y-2">
-              {(tenant?.integrations ?? profile.integrations ?? []).length > 0 ? (
-                (tenant?.integrations ?? profile.integrations).map((integration, i) => (
-                  <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-slate-950/50 border border-white/5">
-                    <span className="text-slate-300 capitalize">{integration.type.replace("_", " ")}</span>
-                    <span className={`text-xs font-semibold ${integration.connected ? "text-green-400" : "text-slate-500"}`}>
-                      {integration.connected ? "✓ Connected" : "Not connected"}
-                    </span>
-                  </div>
-                ))
-              ) : (
-                <p className="text-slate-400 text-sm">No integrations yet. Connect your tools to get started.</p>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* AI Insights */}
-        <div className="p-6 rounded-2xl border border-violet-500/20 bg-violet-500/5">
-          <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
-            <span>✨</span> AI Insights
-          </h2>
-          <div className="grid md:grid-cols-3 gap-4">
-            <button type="button" onClick={() => openAction("customer")} className="p-4 rounded-lg bg-slate-950/50 border border-white/5 hover:border-violet-400/30 transition-all cursor-pointer group text-left">
-              <div className="text-2xl mb-2">🎯</div>
-              <p className="text-sm text-slate-300 group-hover:text-violet-300 transition-colors">
-                Your profile is ready. I&apos;m learning about your business operations.
-              </p>
-            </button>
-            <button type="button" onClick={() => router.push("/onboarding")} className="p-4 rounded-lg bg-slate-950/50 border border-white/5 hover:border-violet-400/30 transition-all cursor-pointer group text-left">
-              <div className="text-2xl mb-2">📈</div>
-              <p className="text-sm text-slate-300 group-hover:text-violet-300 transition-colors">
-                Connect your email, calendar, and payment tools for real-time insights.
-              </p>
-            </button>
-            <button type="button" onClick={() => openAction("task")} className="p-4 rounded-lg bg-slate-950/50 border border-white/5 hover:border-violet-400/30 transition-all cursor-pointer group text-left">
-              <div className="text-2xl mb-2">📊</div>
-              <p className="text-sm text-slate-300 group-hover:text-violet-300 transition-colors">
-                Every invoice, customer, and task you create teaches me about your business.
-              </p>
-            </button>
-          </div>
-        </div>
-
-        {/* Quick Actions */}
-        <div className="grid md:grid-cols-4 gap-4">
-          {[
-            { label: "Invoice", icon: "📄", desc: "Create invoice", action: () => openAction("invoice") },
-            { label: "Customer", icon: "👥", desc: "Add customer", action: () => openAction("customer") },
-            { label: "Task", icon: "✓", desc: "Create task", action: () => openAction("task") },
-            { label: "Connect", icon: "🔗", desc: "Link tools", action: () => router.push("/onboarding") },
-          ].map((action, i) => (
-            <button
-              key={i}
-              type="button"
-              onClick={action.action}
-              className="p-4 rounded-xl border border-white/10 bg-slate-950/50 hover:bg-slate-900/70 hover:border-violet-400/40 transition-all group cursor-pointer"
-            >
-              <div className="text-3xl mb-3 group-hover:scale-110 transition-transform">{action.icon}</div>
-              <div className="text-sm font-medium text-slate-200 group-hover:text-violet-300 transition-colors">
-                {action.label}
-              </div>
-              <div className="text-xs text-slate-400 mt-1">{action.desc}</div>
-            </button>
-          ))}
-        </div>
-
-        {activity.length > 0 && (
-          <div className="p-6 rounded-2xl border border-violet-500/20 bg-violet-500/5">
-            <h2 className="text-xl font-semibold mb-4">Recent Activity</h2>
-            <div className="space-y-2">
-              {activity.slice(0, 6).map((event) => (
-                <div key={event.id} className="flex items-center justify-between rounded-lg border border-white/5 bg-slate-950/50 px-3 py-2 text-sm">
-                  <span className="text-slate-200">{event.type.replace(".", " ")}</span>
-                  <span className="text-xs text-slate-500">{new Date(event.createdAt).toLocaleString()}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Business Memory Activity */}
-        <div className="p-6 rounded-2xl border border-violet-500/20 bg-violet-500/5">
-          <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
-            <span>🧠</span> Business Memory
-          </h2>
-          {profile.memoryNodes && profile.memoryNodes.length > 0 ? (
-            <div className="space-y-3">
-              {profile.memoryNodes.map((node, i) => (
-                <div key={i} className="p-3 rounded-lg bg-slate-950/50 border border-white/5 hover:border-violet-400/30 transition-all">
-                  <p className="text-sm font-medium text-slate-200">{node.title}</p>
-                  <p className="text-xs text-slate-400 mt-1">{node.content}</p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-8 text-slate-400">
-              <p className="mb-2">📚 No memory yet</p>
-              <p className="text-sm">Start creating invoices, customers, and tasks. I&apos;ll build your business memory automatically.</p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {action && (
-        <div className="fixed inset-0 z-10 flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true">
-          <div className="w-full max-w-md rounded-2xl border border-violet-500/30 bg-[#101019] p-6 shadow-2xl">
-            <div className="mb-5 flex items-center justify-between">
-              <h2 className="text-xl font-semibold">Create {action}</h2>
-              <button type="button" onClick={() => setAction(null)} className="text-slate-400 hover:text-white" aria-label="Close">x</button>
-            </div>
-            <div className="space-y-3">
-              {action === "customer" && <>
-                <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Customer name" className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-white" />
-                <input value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} placeholder="Email (optional)" type="email" className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-white" />
-              </>}
-              {action === "task" && <input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="Task title" className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-white" />}
-              {action === "invoice" && <>
-                <input value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} placeholder="Invoice number" className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-white" />
-                <input value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} placeholder="Amount in NGN" type="number" min="1" className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-white" />
-              </>}
-              {actionStatus && <p className="text-sm text-violet-200">{actionStatus}</p>}
-              <button type="button" disabled={saving} onClick={submitAction} className="w-full rounded-lg bg-violet-500 px-4 py-3 font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50">{saving ? "Saving..." : `Create ${action}`}</button>
-            </div>
-          </div>
-        </div>
-      )}
-      {checkinOpen && (
-        <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-labelledby="checkin-title">
-          <div className="w-full max-w-md rounded-2xl border border-violet-500/30 bg-[#101019] p-6 shadow-2xl">
-            <div className="mb-5 flex items-center justify-between"><div><h2 id="checkin-title" className="text-xl font-semibold">Keep Kora current</h2><p className="mt-1 text-sm text-slate-400">This becomes a verified note in your business memory.</p></div><button type="button" onClick={() => setCheckinOpen(false)} className="text-slate-400 hover:text-white" aria-label="Close">×</button></div>
-            <div className="space-y-3"><select value={checkinType} onChange={(event) => setCheckinType(event.target.value)} className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-white"><option value="hired">We hired someone</option><option value="customer_cancelled">A customer cancelled</option><option value="product_launched">We launched a product or service</option><option value="payment_received">We received a significant payment</option><option value="prices_changed">We changed prices</option><option value="nothing_significant">Nothing significant</option><option value="other">Something else</option></select><textarea value={checkinNote} onChange={(event) => setCheckinNote(event.target.value)} maxLength={500} placeholder="Add context (optional)" className="min-h-28 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-white" />{checkinStatus && <p className="text-sm text-violet-200">{checkinStatus}</p>}<button type="button" disabled={saving} onClick={submitCheckin} className="w-full rounded-lg bg-violet-500 px-4 py-3 font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50">{saving ? "Saving…" : "Save update"}</button></div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+  return <main className="min-h-screen bg-[#07070f] pb-12 text-white"><header className="border-b border-white/10 bg-[radial-gradient(circle_at_20%_0%,rgba(124,58,237,0.22),transparent_32%)]"><div className="mx-auto flex max-w-7xl flex-col gap-6 px-5 py-6 sm:px-8 lg:px-10 md:flex-row md:items-center md:justify-between"><div><p className="text-xs font-semibold uppercase tracking-[0.22em] text-violet-300">Kora workspace</p><h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Good to see you, {user.name.split(" ")[0]}.</h1><p className="mt-2 text-sm text-slate-400">A current view of the business you are running.</p></div><div className="flex items-center gap-3"><span className="rounded-xl border border-violet-300/20 bg-violet-500/10 px-4 py-2 text-sm text-violet-100">{titleCase(user.role)}</span><button type="button" onClick={signOut} className="rounded-lg border border-white/15 px-3 py-2 text-sm text-slate-300 transition hover:border-white/35 hover:text-white">Sign out</button></div></div></header><div className="mx-auto max-w-7xl space-y-7 px-5 py-7 sm:px-8 lg:px-10">
+    {notice && <div role="status" className="flex items-center justify-between gap-3 rounded-xl border border-violet-300/30 bg-violet-500/10 px-4 py-3 text-sm text-violet-100"><span>{notice}</span><button type="button" onClick={() => setNotice("")} aria-label="Dismiss notification" className="text-lg leading-none">×</button></div>}
+    <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{metrics.map(([label, value, caption]) => <article key={label} className="rounded-2xl border border-white/10 bg-white/[0.035] p-5 transition duration-200 hover:-translate-y-0.5 hover:border-violet-300/35"><p className="text-sm text-slate-400">{label}</p><p className="mt-4 text-3xl font-semibold tracking-tight">{value}</p><p className="mt-2 text-xs text-slate-500">{caption}</p></article>)}</section>
+    <section className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
+      <article className="rounded-2xl border border-violet-300/20 bg-gradient-to-br from-violet-500/[0.12] to-[#11111c] p-5 sm:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs uppercase tracking-[0.18em] text-violet-300">Daily briefing · grounded in workspace records</p><h2 className="mt-2 text-xl font-semibold">Here is what deserves your attention</h2></div><span className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-400">{briefing ? `Updated ${new Date(briefing.generatedAt).toLocaleTimeString("en-NG", { hour: "2-digit", minute: "2-digit" })}` : "Loading records…"}</span></div>
+        <div className="mt-5 space-y-3">{briefing?.items.map((item) => <div key={item.id} className="flex flex-col gap-3 rounded-xl border border-white/10 bg-black/20 p-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex gap-3"><span aria-hidden="true" className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${item.level === "urgent" ? "bg-rose-400" : item.level === "positive" ? "bg-emerald-400" : "bg-amber-300"}`} /><div><p className="text-sm font-medium">{item.title}</p><p className="mt-1 text-sm leading-5 text-slate-400">{item.detail}</p></div></div>{item.action && <button type="button" onClick={() => document.getElementById(item.action!)?.scrollIntoView({ behavior: "smooth", block: "center" })} className="shrink-0 self-start rounded-lg border border-white/15 px-3 py-2 text-xs text-violet-200 transition hover:border-violet-300/50">Review records</button>}</div>)}{briefing && briefing.items.length === 0 && <p className="rounded-xl border border-dashed border-white/10 px-4 py-5 text-sm leading-6 text-slate-400">{briefing.emptyMessage}</p>}</div>
+        <p className="mt-4 text-xs leading-5 text-slate-500">No leads, expenses, or project metrics are included until those records are tracked here.</p>
+      </article>
+      <article className="rounded-2xl border border-white/10 bg-white/[0.025] p-5 sm:p-6"><p className="text-xs uppercase tracking-[0.18em] text-violet-300">Week to date</p><h2 className="mt-2 text-xl font-semibold">Operational snapshot</h2><div className="mt-5 grid grid-cols-2 gap-3">{[
+        ["Paid invoice value", money(briefing?.weekly.revenueRecorded ?? 0)], ["Outstanding invoices", String(briefing?.weekly.outstandingInvoices ?? "—")], ["New customers", String(briefing?.weekly.newCustomers ?? "—")], ["Tasks completed", `${briefing?.weekly.tasksCompleted ?? "—"} / ${briefing?.weekly.tasksCreated ?? "—"}`],
+      ].map(([label, value]) => <div key={label} className="rounded-xl border border-white/5 bg-black/20 p-4"><p className="text-xs text-slate-500">{label}</p><p className="mt-2 text-lg font-semibold">{value}</p></div>)}</div><p className="mt-4 text-xs leading-5 text-slate-500">Revenue is paid invoice value recorded this week. Expenses, leads, deals, and project progress are not yet tracked, so no estimates are shown.</p></article>
+    </section>
+    <section className="rounded-2xl border border-white/10 bg-white/[0.025] p-5 sm:p-6">
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center"><div><p className="text-xs uppercase tracking-[0.18em] text-violet-300">Business memory</p><h2 className="mt-2 text-xl font-semibold">Context that compounds</h2><p className="mt-1 text-sm leading-6 text-slate-400">Structured records are kept separate from chat history and carry their source and verification state.</p></div><button type="button" disabled={!canInvoice || saving} onClick={refreshRecommendations} className="rounded-xl border border-violet-300/30 px-4 py-3 text-sm font-semibold text-violet-100 transition hover:bg-violet-500/10 disabled:cursor-not-allowed disabled:opacity-50">{saving ? "Reviewing…" : "Review records for actions"}</button></div>
+      {memoryRecords.some((record) => record.entityType === "ai_recommendation" && record.status === "pending_approval") && <div className="mt-5 space-y-3">{memoryRecords.filter((record) => record.entityType === "ai_recommendation" && record.status === "pending_approval").map((record) => <article key={record.id} className="rounded-xl border border-amber-300/20 bg-amber-300/[0.04] p-4"><div className="flex flex-col justify-between gap-4 md:flex-row md:items-center"><div><p className="font-medium">{record.title}</p><p className="mt-1 text-sm text-slate-400">{record.summary}</p><p className="mt-2 text-xs text-slate-500">Source: {record.source} · {record.verificationStatus} · Approval records consent only.</p></div><div className="flex gap-2"><button type="button" disabled={!canInvoice || saving} onClick={() => decideRecommendation(record.id, "approved")} className="rounded-lg bg-violet-500 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Approve</button><button type="button" disabled={!canInvoice || saving} onClick={() => decideRecommendation(record.id, "rejected")} className="rounded-lg border border-white/15 px-3 py-2 text-xs text-slate-200 disabled:opacity-50">Reject</button></div></div></article>)}</div>}
+      <div className="mt-5 grid gap-3 md:grid-cols-2">{memoryRecords.filter((record) => record.entityType !== "ai_recommendation").slice(0, 4).map((record) => <article key={record.id} className="rounded-xl border border-white/5 bg-black/20 p-4"><p className="text-xs uppercase tracking-wider text-slate-500">{titleCase(record.entityType)} · {titleCase(record.source)}</p><h3 className="mt-2 text-sm font-medium">{record.title}</h3><p className="mt-1 text-sm leading-5 text-slate-400">{record.summary}</p><p className="mt-2 text-xs text-slate-500">{titleCase(record.verificationStatus)} · Updated {new Date(record.createdAt).toLocaleDateString("en-NG")}</p></article>)}</div>
+      {memoryRecords.length === 0 && <p className="mt-5 rounded-xl border border-dashed border-white/10 px-4 py-4 text-sm leading-6 text-slate-500">New customer, task, invoice, onboarding, and confirmed check-in records become business context. Configure Firebase Admin to persist and retrieve the shared memory catalog.</p>}
+    </section>
+    <section className="rounded-2xl border border-violet-400/20 bg-gradient-to-r from-violet-500/15 to-fuchsia-500/10 p-5 sm:p-6"><div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center"><div><p className="text-lg font-semibold">Keep the operating picture accurate.</p><p className="mt-1 max-w-2xl text-sm leading-6 text-slate-300">Tell Kora about a meaningful change and it is saved as a verified note, scoped to this workspace.</p></div><button type="button" onClick={() => setCheckinOpen(true)} className="shrink-0 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-[#120b23] transition hover:-translate-y-0.5 hover:bg-violet-100">Add an update</button></div></section>
+    <section><div className="mb-3 flex items-end justify-between"><div><p className="text-xs uppercase tracking-[0.18em] text-violet-300">Actions</p><h2 className="mt-1 text-xl font-semibold">Make the next change</h2></div><p className="text-xs text-slate-500">Your role: {titleCase(user.role)}</p></div><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{actions.map((item) => <button key={item.label} type="button" disabled={!item.enabled} onClick={item.click} className="group rounded-xl border border-white/10 bg-[#101019] p-5 text-left transition duration-200 hover:-translate-y-0.5 hover:border-violet-300/45 hover:bg-violet-500/10 disabled:cursor-not-allowed disabled:opacity-45"><p className="font-semibold group-hover:text-violet-200">{item.label}</p><p className="mt-2 text-sm text-slate-400">{item.detail}</p>{!item.enabled && <p className="mt-3 text-xs text-amber-300">Requires a higher workspace role</p>}</button>)}</div></section>
+    <section className="grid gap-6 lg:grid-cols-2"><Panel id="tasks" title="Recent tasks" eyebrow="Work queue" right={`${tasks.length} total`}>{tasks.slice(0, 6).map((task) => <div key={task.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-black/20 px-4 py-3"><div className="min-w-0"><p className="truncate text-sm font-medium">{task.title}</p><p className="mt-1 text-xs text-slate-500">{titleCase(task.priority)} priority</p></div><span className="rounded-full bg-white/5 px-2.5 py-1 text-xs text-slate-300">{titleCase(task.status)}</span></div>)}{tasks.length === 0 && <Empty text="No tasks yet. Create one when work needs a clear owner." />}</Panel><Panel title="What changed recently" eyebrow="Business activity" right="Live records">{activity.slice(0, 6).map((event) => <div key={event.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-black/20 px-4 py-3"><div><p className="text-sm font-medium">{titleCase(event.type)}</p><p className="mt-1 text-xs text-slate-500">{new Date(event.createdAt).toLocaleString("en-NG", { dateStyle: "medium", timeStyle: "short" })}</p></div><span className="h-2 w-2 shrink-0 rounded-full bg-violet-400" /></div>)}{activity.length === 0 && <Empty text="New customers, tasks and invoices will appear here as they are created." />}</Panel></section>
+    <section className="grid gap-6 lg:grid-cols-2"><Panel id="invoices" title="Invoices to review" eyebrow="Billing" right={`${openInvoices.length} open`}>{openInvoices.slice(0, 6).map((invoice) => <div key={invoice.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-black/20 px-4 py-3"><div><p className="text-sm font-medium">{invoice.number}</p><p className="mt-1 text-xs text-slate-500">{invoice.dueAt ? `Due ${new Date(invoice.dueAt).toLocaleDateString("en-NG")}` : "No due date recorded"}</p></div><div className="text-right"><p className="text-sm">{money(Number(invoice.amount))}</p><p className="mt-1 text-xs text-amber-200">{titleCase(invoice.status)}</p></div></div>)}{openInvoices.length === 0 && <Empty text="No open invoices in the records you can access." />}</Panel><Panel id="customers" title="Recent customers" eyebrow="Relationships" right={`${customers.length} total`}>{customers.slice(0, 6).map((customer) => <div key={customer.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-black/20 px-4 py-3"><div className="min-w-0"><p className="truncate text-sm font-medium">{customer.name}</p><p className="mt-1 truncate text-xs text-slate-500">{customer.email || "No email recorded"}</p></div><span className="rounded-full bg-white/5 px-2.5 py-1 text-xs text-slate-300">{titleCase(customer.status)}</span></div>)}{customers.length === 0 && <Empty text="No customer records yet." />}</Panel></section>
+    <section className="rounded-2xl border border-white/10 bg-white/[0.025] p-5 sm:p-6"><p className="text-xs uppercase tracking-[0.18em] text-violet-300">Business context</p><h2 className="mt-1 text-xl font-semibold">What Kora knows about this workspace</h2><dl className="mt-5 grid gap-4 sm:grid-cols-3"><Detail label="Business type" value={titleCase(profile.type)} /><Detail label="Team size" value={`${profile.employees || 0} people`} /><Detail label="Current focus" value={titleCase(profile.mainChallenge)} /></dl></section>
+  </div>{action && <Modal title={`Create ${action}`} onClose={() => setAction(null)}><div className="space-y-3">{action === "customer" && <><Field value={form.name} set={(name) => setForm({ ...form, name })} placeholder="Customer name" /><Field value={form.email} set={(email) => setForm({ ...form, email })} placeholder="Email address (optional)" type="email" /></>}{action === "task" && <Field value={form.title} set={(title) => setForm({ ...form, title })} placeholder="Task title" />}{action === "invoice" && <><Field value={form.number} set={(number) => setForm({ ...form, number })} placeholder="Invoice number" /><Field value={form.amount} set={(amount) => setForm({ ...form, amount })} placeholder="Amount in NGN" type="number" /></>}<button type="button" disabled={saving} onClick={saveAction} className="w-full rounded-xl bg-violet-500 px-4 py-3 font-semibold transition hover:bg-violet-400 disabled:opacity-50">{saving ? "Saving…" : `Create ${action}`}</button></div></Modal>}{checkinOpen && <Modal title="Keep Kora current" onClose={() => setCheckinOpen(false)}><p className="mb-4 text-sm leading-6 text-slate-400">This creates a verified memory note for your workspace.</p><div className="space-y-3"><select value={checkin.type} onChange={(event) => setCheckin({ ...checkin, type: event.target.value })} className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-sm outline-none focus:border-violet-400"><option value="hired">We hired someone</option><option value="customer_cancelled">A customer cancelled</option><option value="product_launched">We launched something</option><option value="payment_received">We received a significant payment</option><option value="prices_changed">We changed prices</option><option value="nothing_significant">Nothing significant today</option><option value="other">Something else</option></select><textarea value={checkin.note} onChange={(event) => setCheckin({ ...checkin, note: event.target.value })} maxLength={500} placeholder="Add context (optional)" className="min-h-28 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-sm outline-none focus:border-violet-400" /><button type="button" disabled={saving} onClick={saveCheckin} className="w-full rounded-xl bg-violet-500 px-4 py-3 font-semibold transition hover:bg-violet-400 disabled:opacity-50">{saving ? "Saving…" : "Save update"}</button></div></Modal>}</main>;
 }
+
+function Panel({ id, title, eyebrow, right, children }: { id?: string; title: string; eyebrow: string; right: string; children: ReactNode }) { return <article id={id} className="scroll-mt-6 rounded-2xl border border-white/10 bg-white/[0.025] p-5 sm:p-6"><div className="flex items-center justify-between"><div><p className="text-xs uppercase tracking-[0.18em] text-violet-300">{eyebrow}</p><h2 className="mt-1 text-xl font-semibold">{title}</h2></div><span className="text-sm text-slate-500">{right}</span></div><div className="mt-5 space-y-2">{children}</div></article>; }
+function Field({ value, set, placeholder, type = "text" }: { value: string; set: (value: string) => void; placeholder: string; type?: string }) { return <input required value={value} onChange={(event) => set(event.target.value)} placeholder={placeholder} type={type} min={type === "number" ? "1" : undefined} className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-sm outline-none placeholder:text-slate-500 focus:border-violet-400" />; }
+function Empty({ text }: { text: string }) { return <p className="rounded-xl border border-dashed border-white/10 px-4 py-6 text-center text-sm leading-6 text-slate-500">{text}</p>; }
+function Detail({ label, value }: { label: string; value: string }) { return <div className="rounded-xl border border-white/5 bg-black/20 p-4"><dt className="text-xs text-slate-500">{label}</dt><dd className="mt-2 text-sm font-medium">{value}</dd></div>; }
+function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) { return <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={title}><div className="w-full max-w-md rounded-2xl border border-violet-300/25 bg-[#11111c] p-5 shadow-2xl sm:p-6"><div className="mb-5 flex items-center justify-between"><h2 className="text-xl font-semibold">{title}</h2><button type="button" onClick={onClose} aria-label="Close dialog" className="rounded-lg px-2 py-1 text-xl text-slate-400 transition hover:bg-white/10 hover:text-white">×</button></div>{children}</div></div>; }

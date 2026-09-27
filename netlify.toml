@@ -20,7 +20,7 @@ NPM_FLAGS = "--legacy-peer-deps"
 [[headers]]
   for = "/api/*"
   [headers.values]
-    Cache-Control = "public, max-age=0, must-revalidate"
+    Cache-Control = "private, no-store, max-age=0"
 
 [[headers]]
   for = "/_next/static/*"

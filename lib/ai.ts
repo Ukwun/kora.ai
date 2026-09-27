@@ -39,10 +39,10 @@ export type AIAnalytics = {
   organizationId: string;
   totalRevenue: number;
   activeCustomers: number;
-  taskCompletion: number;
-  retentionRate: number;
+  openTasks: number;
+  retentionRate: number | null;
   avgInvoiceValue: number;
-  paymentDaysOverdue: number;
+  paymentDaysOverdue: number | null;
   topPerformers: string[];
   bottlenecks: string[];
   opportunities: string[];
@@ -65,104 +65,44 @@ export type AIContext = {
     revenue: number;
     customers: number;
     tasks: number;
-    retention: number;
+    retention: number | null;
+  };
+  evidence?: {
+    overdueInvoiceCount: number;
+    overdueInvoiceAmount: number;
+    overdueTaskCount: number;
+    dueTodayTaskCount: number;
+    paidInvoiceCount: number;
+    overdueInvoices: Array<{ id: string; number: string; dueAt?: string; amount: number; customerId?: string }>;
+    overdueTasks: Array<{ id: string; title: string; dueAt?: string; assignedTo?: string }>;
+    dueTodayTasks: Array<{ id: string; title: string; dueAt?: string; assignedTo?: string }>;
   };
 };
 
 export class AIEngine {
   async generateRecommendations(context: AIContext): Promise<AIRecommendation[]> {
     const recommendations: AIRecommendation[] = [];
-
-    // Revenue Optimization
-    if (context.metrics.revenue > 10000000) {
-      recommendations.push({
-        id: `rec_${Date.now()}_1`,
-        userId: context.user.id,
-        organizationId: context.organization.id,
-        title: "Scale pricing strategy",
-        summary: "Revenue has exceeded ₦10M. Consider implementing tiered pricing or premium services to capture more value from high-value customers.",
-        action: "Review pricing model with finance team",
-        intensity: "High",
-        category: "revenue",
-        approved: false,
-        executed: false,
-        createdAt: new Date().toISOString(),
-      });
+    const evidence = context.evidence;
+    const add = (key: string, title: string, summary: string, action: string, category: AIRecommendation["category"], intensity: AIRecommendation["intensity"]) => {
+      recommendations.push({ id: `rec_${Date.now()}_${key}`, userId: context.user.id, organizationId: context.organization.id, title, summary, action, intensity, category, approved: false, executed: false, createdAt: new Date().toISOString() });
+    };
+    if (evidence && evidence.overdueInvoiceCount > 0) {
+      const amount = new Intl.NumberFormat("en-NG", { style: "currency", currency: context.organization.currency || "NGN", maximumFractionDigits: 0 }).format(evidence.overdueInvoiceAmount);
+      add("overdue-invoices", "Review overdue invoices", `${evidence.overdueInvoiceCount} invoice${evidence.overdueInvoiceCount === 1 ? " is" : "s are"} past due, totaling ${amount}.`, "Review the invoice records and decide whether to contact those customers.", "cash-flow", "High");
     }
-
-    // Customer Retention
-    if (context.memoryNodes.some((n) => n.label === "Customers" && n.count > 100)) {
-      recommendations.push({
-        id: `rec_${Date.now()}_2`,
-        userId: context.user.id,
-        organizationId: context.organization.id,
-        title: "Launch retention program",
-        summary: "With 100+ customers, implement a loyalty or VIP program to increase repeat business and reduce churn.",
-        action: "Design customer retention program",
-        intensity: "Medium",
-        category: "customer",
-        approved: false,
-        executed: false,
-        createdAt: new Date().toISOString(),
-      });
+    if (evidence && evidence.overdueTaskCount > 0) {
+      add("overdue-tasks", "Review overdue tasks", `${evidence.overdueTaskCount} open task${evidence.overdueTaskCount === 1 ? " is" : "s are"} past due.`, "Review task owners, status, and due dates.", "operations", "High");
     }
-
-    // Task Completion
-    if (context.metrics.tasks > 50) {
-      recommendations.push({
-        id: `rec_${Date.now()}_3`,
-        userId: context.user.id,
-        organizationId: context.organization.id,
-        title: "Automate task workflows",
-        summary: "With 50+ tasks in pipeline, implement workflow automation to reduce manual work and increase team capacity.",
-        action: "Configure task automation rules",
-        intensity: "High",
-        category: "operations",
-        approved: false,
-        executed: false,
-        createdAt: new Date().toISOString(),
-      });
+    if (evidence && evidence.dueTodayTaskCount > 0) {
+      add("due-today", "Check today?s due tasks", `${evidence.dueTodayTaskCount} open task${evidence.dueTodayTaskCount === 1 ? " is" : "s are"} due today.`, "Review today?s tasks with their assignees.", "operations", "Medium");
     }
-
-    // Team Expansion
-    if (context.metrics.revenue > 5000000 && context.metrics.customers > 50) {
-      recommendations.push({
-        id: `rec_${Date.now()}_4`,
-        userId: context.user.id,
-        organizationId: context.organization.id,
-        title: "Hire dedicated account manager",
-        summary: "At ₦5M+ revenue with 50+ customers, dedicated account management will improve retention and customer satisfaction.",
-        action: "Post job opening for Account Manager",
-        intensity: "Medium",
-        category: "team",
-        approved: false,
-        executed: false,
-        createdAt: new Date().toISOString(),
-      });
-    }
-
-    // Cash Flow Management
-    recommendations.push({
-      id: `rec_${Date.now()}_5`,
-      userId: context.user.id,
-      organizationId: context.organization.id,
-      title: "Optimize payment terms",
-      summary: "Review overdue invoices and implement stricter payment terms to improve cash flow cycle.",
-      action: "Review and update payment policies",
-      intensity: "Medium",
-      category: "cash-flow",
-      approved: false,
-      executed: false,
-      createdAt: new Date().toISOString(),
-    });
-
     return recommendations;
   }
 
   async generateInsights(analytics: AIAnalytics): Promise<AIInsight[]> {
     const insights: AIInsight[] = [];
 
-    if (analytics.paymentDaysOverdue > 15) {
+    if (analytics.paymentDaysOverdue !== null && analytics.paymentDaysOverdue > 15) {
       insights.push({
         id: `ins_${Date.now()}_1`,
         organizationId: analytics.organizationId,
@@ -174,7 +114,7 @@ export class AIEngine {
       });
     }
 
-    if (analytics.retentionRate < 85) {
+    if (analytics.retentionRate !== null && analytics.retentionRate < 85) {
       insights.push({
         id: `ins_${Date.now()}_2`,
         organizationId: analytics.organizationId,
@@ -210,38 +150,23 @@ export class AIEngine {
       });
     }
 
-    if (analytics.activeCustomers > analytics.totalRevenue / 50000) {
-      insights.push({
-        id: `ins_${Date.now()}_5`,
-        organizationId: analytics.organizationId,
-        title: "Upsell opportunity",
-        summary: `${analytics.activeCustomers} customers with average value of ₦${Math.round(analytics.avgInvoiceValue).toLocaleString()}. Potential for upselling premium services.`,
-        type: "opportunity",
-        intensity: "Low",
-        createdAt: new Date().toISOString(),
-      });
-    }
-
     return insights;
   }
 
   async analyzeContext(context: AIContext): Promise<AIAnalytics> {
+    const evidence = context.evidence;
     return {
       organizationId: context.organization.id,
       totalRevenue: context.metrics.revenue,
       activeCustomers: context.metrics.customers,
-      taskCompletion: context.metrics.tasks,
+      openTasks: context.metrics.tasks,
       retentionRate: context.metrics.retention,
-      avgInvoiceValue: context.metrics.revenue / Math.max(context.metrics.customers, 1),
-      paymentDaysOverdue: Math.floor(Math.random() * 20),
-      topPerformers: ["John Akinrinde", "Oluchi Adeyemi"],
-      bottlenecks: ["Quote-to-invoice", "Approval delays"],
-      opportunities: ["Upselling", "Automation", "Team expansion"],
-      trends: {
-        revenue: context.metrics.revenue > 10000000 ? "up" : "stable",
-        customers: context.metrics.customers > 100 ? "up" : "stable",
-        retention: context.metrics.retention > 90 ? "up" : "down",
-      },
+      avgInvoiceValue: evidence?.paidInvoiceCount ? context.metrics.revenue / evidence.paidInvoiceCount : 0,
+      paymentDaysOverdue: null,
+      topPerformers: [],
+      bottlenecks: [],
+      opportunities: [],
+      trends: {},
     };
   }
 
@@ -255,7 +180,7 @@ Current Business Context:
 - Revenue: ₦${context.metrics.revenue.toLocaleString()}
 - Customers: ${context.metrics.customers}
 - Active Tasks: ${context.metrics.tasks}
-- Retention Rate: ${context.metrics.retention}%
+- Retention Rate: ${context.metrics.retention === null ? "not enough verified history to calculate" : `${context.metrics.retention}%`}
 
 Your responses should be:
 1. Concise and actionable
