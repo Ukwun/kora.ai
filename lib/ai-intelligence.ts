@@ -2,6 +2,8 @@ import { query, postgresEnabled } from "./db";
 import { readDatabase } from "./store";
 import { isFirebaseAdminConfigured } from "./firebase-admin";
 import { searchBusinessMemoryRecords, type BusinessMemoryRecord } from "./business-memory-records";
+import { listOrganizationRecords } from "./operations";
+import type { Customer, Invoice, Payment, Task } from "./store";
 
 export type AIIntent = "repurchase_candidates" | "business_memory" | "unsupported";
 
@@ -32,7 +34,8 @@ export function detectBusinessIntent(question: string): AIIntent {
   if (/buy again|purchase again|repurchase|returning customer|likely to buy/.test(normalized)) {
     return "repurchase_candidates";
   }
-  return "business_memory";
+  if (/customer|client|lead|invoice|payment|task|project|expense|employee|team|supplier|product|service|appointment|meeting|document|business|revenue|sales|spend|who|what|which|how much|how many|overdue|remember|quote|quotation|inventory|stock/.test(normalized)) return "business_memory";
+  return "unsupported";
 }
 
 export async function getRepurchaseCandidates(organizationId: string): Promise<RepurchaseCandidate[]> {
@@ -137,17 +140,49 @@ export async function answerBusinessQuestion(organizationId: string, question: s
     return { intent, generatedAt: new Date().toISOString(), candidates: [], dataNotice: "Kora can currently answer repurchase-candidate questions from confirmed customer, invoice, and payment records." };
   }
   if (intent === "business_memory") {
-    if (!isFirebaseAdminConfigured()) {
-      return { intent, generatedAt: new Date().toISOString(), candidates: [], dataNotice: "Structured business memory is not connected to Firebase for this deployment yet." };
-    }
-    const memoryRecords = await searchBusinessMemoryRecords(organizationId, question);
+    const memoryRecords = isFirebaseAdminConfigured() ? await searchBusinessMemoryRecords(organizationId, question) : [];
+    const [customers, invoices, tasks, payments] = await Promise.all([
+      listOrganizationRecords<Customer>("customers", organizationId),
+      listOrganizationRecords<Invoice>("invoices", organizationId),
+      listOrganizationRecords<Task>("tasks", organizationId),
+      listOrganizationRecords<Payment>("payments", organizationId),
+    ]);
+    const coreRecords: BusinessMemoryRecord[] = [...customers, ...invoices, ...tasks, ...payments].map((record) => {
+      const entityType = "number" in record ? "invoice" : "assignedTo" in record ? "task" : "provider" in record ? "payment" : "customer";
+      const id = `${entityType}_${record.id}`;
+      const title = "number" in record ? record.number : "title" in record ? record.title : "name" in record ? record.name : `Payment ${record.id}`;
+      return { id, organizationId, entityType, entityId: record.id, title, summary: `${entityType} record ${title}`, data: record as unknown as Record<string, unknown>, status: "active", source: "structured_application", sourceId: record.id, verificationStatus: "verified", createdBy: "createdBy" in record ? record.createdBy : "system", createdAt: record.createdAt, updatedAt: "updatedAt" in record ? record.updatedAt : record.createdAt, tags: [entityType] } as BusinessMemoryRecord;
+    });
+    const stopWords = new Set(["the", "and", "for", "with", "are", "was", "were", "who", "what", "which", "how", "does", "did", "have", "has", "about", "from", "that", "this", "into", "your", "our", "their", "tell", "show", "please", "much", "many"]);
+    const terms = [...new Set((question.toLowerCase().match(/[a-z0-9]{3,}/g) ?? []).filter((term) => !stopWords.has(term)))];
+    const topicRules: Array<{ pattern: RegExp; types: string[] }> = [
+      { pattern: /revenue|sales|invoice|paid|overdue|payment|cash|income/, types: ["invoice", "payment"] },
+      { pattern: /customer|client/, types: ["customer"] },
+      { pattern: /task|work|delayed|due/, types: ["task"] },
+      { pattern: /lead|deal|quote|quotation/, types: ["lead", "quotation"] },
+      { pattern: /expense|spend|cost/, types: ["expense"] },
+      { pattern: /project/, types: ["project"] },
+      { pattern: /stock|inventory|product|supplier/, types: ["product", "inventory"] },
+      { pattern: /appointment|meeting|document/, types: ["appointment", "meeting", "document"] },
+    ];
+    const topicTypes = new Set(topicRules.filter((rule) => rule.pattern.test(question.toLowerCase())).flatMap((rule) => rule.types));
+    const matchedCore = coreRecords.map((record) => {
+      const searchable = `${record.entityType} ${record.title} ${record.summary} ${JSON.stringify(record.data)}`.toLowerCase();
+      const matchedTerms = terms.filter((term) => searchable.includes(term));
+      const topicalMatch = topicTypes.has(record.entityType);
+      return { record, matchedTerms: topicalMatch && !matchedTerms.length ? [...matchedTerms, record.entityType] : matchedTerms, score: matchedTerms.length + (topicalMatch ? 1 : 0) };
+    }).filter((item) => item.score > 0).sort((a, b) => b.score - a.score || b.record.updatedAt.localeCompare(a.record.updatedAt)).slice(0, 30);
+    const merged = new Map<string, { record: BusinessMemoryRecord; matchedTerms: string[] }>();
+    for (const entry of matchedCore) merged.set(entry.record.id, { record: entry.record, matchedTerms: entry.matchedTerms });
+    for (const entry of memoryRecords) merged.set(entry.record.id, { record: entry.record, matchedTerms: entry.matchedTerms });
+    const selected = [...merged.values()].slice(0, 20);
     return {
       intent,
       generatedAt: new Date().toISOString(),
       candidates: [],
-      memoryRecords: memoryRecords.map(({ record, matchedTerms }) => ({ record, matchedTerms })),
-      sources: memoryRecords.map(({ record }) => ({ id: record.id, entityType: record.entityType, title: record.title, source: record.source, verificationStatus: record.verificationStatus, updatedAt: record.updatedAt })),
-      dataNotice: memoryRecords.length ? undefined : "No matching business memory records were found. Add a confirmed note or connect a supported data source.",
+      memoryRecords: selected,
+      sources: selected.map(({ record }) => ({ id: record.id, entityType: record.entityType, title: record.title, source: record.source, verificationStatus: record.verificationStatus, updatedAt: record.updatedAt })),
+      dataNotice: selected.length ? undefined : isFirebaseAdminConfigured() ? "No matching records were found for this question." : "No matching core records were found. Connect Firebase to search structured notes and documents.",
     };
   }
   const candidates = await getRepurchaseCandidates(organizationId);

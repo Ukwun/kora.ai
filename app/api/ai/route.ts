@@ -74,16 +74,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    if (user.id !== session.id || user.organizationId !== session.organizationId) {
+    if (user.id !== session.id) {
       await logAudit({ userId: session.id, organizationId: session.organizationId, action: "permission.denied", resource: "ai", status: "failure", details: { reason: "The current account or workspace no longer matches this session." }, ipAddress: getClientIP(request) });
       return NextResponse.json({ error: "Your active workspace membership could not be verified." }, { status: 403 });
     }
-    if (!canPerformAction(user, "all_data_access")) {
-      await logAudit({ userId: user.id, organizationId: user.organizationId, action: "permission.denied", resource: "ai", status: "failure", details: { reason: "Insufficient permissions" }, ipAddress: getClientIP(request) });
+    if (!canPerformAction(session, "all_data_access")) {
+      await logAudit({ userId: user.id, organizationId: session.organizationId, action: "permission.denied", resource: "ai", status: "failure", details: { reason: "Insufficient permissions" }, ipAddress: getClientIP(request) });
       return NextResponse.json({ error: "Insufficient permissions for AI features" }, { status: 403 });
     }
 
-    const organization = await findOrganizationById(user.organizationId);
+    const organization = await findOrganizationById(session.organizationId);
     if (!organization) {
       await logAudit({
         userId: session.id,
@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Organization not found" }, { status: 404 });
     }
 
-    const fullContext = await buildAuthorizedAIContext(user, organization);
+    const fullContext = await buildAuthorizedAIContext({ ...user, role: session.role as typeof user.role, organizationId: session.organizationId }, organization);
 
     let result;
 
@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
           }
           result = await Promise.all(recommendations.map(async (recommendation) => {
             const record = await createBusinessMemoryRecord({
-              organizationId: user.organizationId,
+              organizationId: session.organizationId,
               createdBy: user.id,
               entityType: "ai_recommendation",
               title: recommendation.title,
@@ -143,9 +143,9 @@ export async function POST(request: NextRequest) {
         if (!question || question.length > 2_000) {
           return NextResponse.json({ error: "Enter a business question of up to 2,000 characters." }, { status: 400 });
         }
-        const intelligence = await answerBusinessQuestion(user.organizationId, question);
-        if (intelligence.intent === "unsupported") {
-          result = intelligence;
+        const intelligence = await answerBusinessQuestion(session.organizationId, question);
+        if (intelligence.intent === "unsupported" || (intelligence.intent === "business_memory" && !intelligence.memoryRecords?.length) || (intelligence.intent === "repurchase_candidates" && !intelligence.candidates.length)) {
+          result = { ...intelligence, message: intelligence.dataNotice ?? "I do not have enough authorized records to answer that reliably." };
           break;
         }
         const evidence = JSON.stringify({
@@ -167,7 +167,7 @@ export async function POST(request: NextRequest) {
         const response = await aiEngine.chat([
           {
             role: "user",
-            content: `Question: ${question}\n\nConfirmed Kora analytics evidence (use only these facts; do not invent customers, values, or causes):\n${evidence}`,
+            content: `Question: ${question}\n\nConfirmed Kora analytics evidence (use only these facts; do not invent customers, values, or causes). Cite supporting business-memory records inline using their exact IDs as [source: record_id]. If evidence does not answer the question, say what is missing.\n${evidence}`,
           },
         ], groundedContext);
         result = { ...intelligence, message: response };

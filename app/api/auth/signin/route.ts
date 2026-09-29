@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { findUserByEmail } from "@/lib/store";
+import { findUserByEmail, listUserMemberships } from "@/lib/store";
 import { setSessionCookie } from "@/lib/session";
 
 const signinSchema = z.object({
@@ -37,14 +37,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Incorrect password." }, { status: 401 });
     }
 
+    const memberships = await listUserMemberships(user.id);
+    const membership = memberships.find((entry) => entry.organizationId === user.organizationId) ?? memberships[0];
+    if (!membership) return NextResponse.json({ error: "Your account is not connected to an active workspace. Contact an administrator." }, { status: 403 });
+
     const response = NextResponse.json({
       message: "Signed in successfully.",
       user: {
         id: user.id,
         name: user.name,
         email: user.email,
-        role: user.role,
-        organizationId: user.organizationId,
+        role: membership.role,
+        organizationId: membership.organizationId,
       },
     });
 
@@ -52,8 +56,8 @@ export async function POST(request: Request) {
       id: user.id,
       name: user.name,
       email: user.email,
-      role: user.role,
-      organizationId: user.organizationId,
+      role: membership.role,
+      organizationId: membership.organizationId,
     });
   } catch {
     return NextResponse.json({ error: "Sign-in failed." }, { status: 500 });

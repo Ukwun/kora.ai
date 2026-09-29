@@ -21,8 +21,8 @@ export async function GET(request: NextRequest) {
       id: user.id,
       name: user.name,
       email: user.email,
-      role: user.role,
-      organizationId: user.organizationId,
+      role: session.role,
+      organizationId: session.organizationId,
     },
   });
 }

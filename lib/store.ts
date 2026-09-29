@@ -1,5 +1,6 @@
 import fs from "fs/promises";
 import path from "path";
+import { createHash } from "node:crypto";
 import bcrypt from "bcryptjs";
 import type { BusinessProfile } from "./business-profile";
 import { postgresEnabled, query, withTransaction } from "./db";
@@ -113,6 +114,7 @@ export type Membership = {
   role: UserRole;
   status: "active" | "invited" | "revoked";
   token?: string;
+  expiresAt?: string;
   createdAt: string;
 };
 
@@ -138,6 +140,7 @@ export type BillingSubscription = {
 };
 
 export type AppDatabase = {
+  schemaVersion: number;
   organizations: Organization[];
   users: BusinessUser[];
   onboarding: OnboardingState[];
@@ -164,6 +167,7 @@ function assertProductionDatabase() {
 
 function defaultDatabaseForDevelopment(): AppDatabase {
   return {
+    schemaVersion: 1,
     organizations: defaultOrganizations,
     users: defaultUsers,
     onboarding: [],
@@ -173,7 +177,7 @@ function defaultDatabaseForDevelopment(): AppDatabase {
     invoices: [],
     payments: [],
     activityEvents: [],
-    memberships: [],
+    memberships: defaultUsers.map((user) => ({ id: `mem_${user.id}`, organizationId: user.organizationId, userId: user.id, email: user.email, role: user.role, status: "active", createdAt: user.createdAt })),
     passwordResetTokens: [],
     emailVerificationTokens: [],
     billingSubscriptions: [],
@@ -226,9 +230,17 @@ export async function readDatabase(): Promise<AppDatabase> {
   const raw = await fs.readFile(dbPath, "utf-8");
   try {
     const parsed = JSON.parse(raw) as AppDatabase;
-    return {
+    const users = (parsed.users ?? defaultDatabase.users).map((user) => ({ ...user, emailVerified: user.emailVerified ?? true, accountStatus: user.accountStatus ?? "active" }));
+    const memberships = parsed.memberships ?? [];
+    if (!parsed.schemaVersion || parsed.schemaVersion < 1) {
+      for (const user of users) {
+        if (!memberships.some((membership) => membership.userId === user.id && membership.organizationId === user.organizationId)) memberships.push({ id: `mem_${user.id}`, organizationId: user.organizationId, userId: user.id, email: user.email, role: user.role, status: "active", createdAt: user.createdAt });
+      }
+    }
+    const database = {
+      schemaVersion: 1,
       organizations: parsed.organizations ?? defaultDatabase.organizations,
-      users: (parsed.users ?? defaultDatabase.users).map((user) => ({ ...user, emailVerified: user.emailVerified ?? true, accountStatus: user.accountStatus ?? "active" })),
+      users,
       onboarding: parsed.onboarding ?? defaultDatabase.onboarding,
       profiles: parsed.profiles ?? defaultDatabase.profiles,
       customers: parsed.customers ?? defaultDatabase.customers,
@@ -236,11 +248,13 @@ export async function readDatabase(): Promise<AppDatabase> {
       invoices: parsed.invoices ?? defaultDatabase.invoices,
       payments: parsed.payments ?? defaultDatabase.payments,
       activityEvents: parsed.activityEvents ?? defaultDatabase.activityEvents,
-      memberships: parsed.memberships ?? defaultDatabase.memberships,
+      memberships,
       passwordResetTokens: parsed.passwordResetTokens ?? defaultDatabase.passwordResetTokens,
       emailVerificationTokens: parsed.emailVerificationTokens ?? defaultDatabase.emailVerificationTokens,
       billingSubscriptions: parsed.billingSubscriptions ?? defaultDatabase.billingSubscriptions,
     };
+    if (!parsed.schemaVersion || parsed.schemaVersion < 1) await writeDatabase(database);
+    return database;
   } catch {
     await fs.writeFile(dbPath, JSON.stringify(defaultDatabase, null, 2), "utf-8");
     return defaultDatabase;
@@ -266,13 +280,14 @@ async function readPostgresDatabase(): Promise<AppDatabase> {
     query<Invoice>("SELECT id, organization_id AS \"organizationId\", customer_id AS \"customerId\", number, amount::float8 AS amount, currency, status, due_at AS \"dueAt\", created_by AS \"createdBy\", created_at AS \"createdAt\", updated_at AS \"updatedAt\" FROM invoices"),
     query<Payment>("SELECT id, organization_id AS \"organizationId\", invoice_id AS \"invoiceId\", customer_id AS \"customerId\", amount::float8 AS amount, currency, provider, provider_reference AS \"providerReference\", status, received_at AS \"receivedAt\", created_at AS \"createdAt\" FROM payments"),
     query<ActivityEvent>("SELECT id, organization_id AS \"organizationId\", actor_user_id AS \"actorUserId\", type, entity_type AS \"entityType\", entity_id AS \"entityId\", payload, created_at AS \"createdAt\" FROM activity_events"),
-    query<Membership>("SELECT id, organization_id AS \"organizationId\", user_id AS \"userId\", email, role, status, token, COALESCE(invited_at, joined_at, NOW()) AS \"createdAt\" FROM memberships"),
+    query<Membership>("SELECT id, organization_id AS \"organizationId\", user_id AS \"userId\", email, role, status, invite_token AS token, invite_expires_at AS \"expiresAt\", COALESCE(invited_at, joined_at, NOW()) AS \"createdAt\" FROM memberships"),
     query<PasswordResetToken>("SELECT token_hash AS \"tokenHash\", user_id AS \"userId\", expires_at AS \"expiresAt\", used_at AS \"usedAt\" FROM password_reset_tokens"),
     query<EmailVerificationToken>("SELECT token_hash AS \"tokenHash\", user_id AS \"userId\", expires_at AS \"expiresAt\", used_at AS \"usedAt\" FROM email_verification_tokens"),
     query<BillingSubscription>("SELECT organization_id AS \"organizationId\", plan, status, provider, provider_customer_id AS \"providerCustomerId\", provider_subscription_id AS \"providerSubscriptionId\", current_period_end AS \"currentPeriodEnd\", seat_limit AS \"seatLimit\", updated_at AS \"updatedAt\" FROM billing_subscriptions"),
   ]);
 
   return {
+    schemaVersion: 1,
     organizations: organizations.rows,
     users: users.rows,
     onboarding: onboarding.rows,
@@ -303,7 +318,7 @@ async function writePostgresDatabase(data: AppDatabase) {
     for (const invoice of data.invoices) await client.query("INSERT INTO invoices (id, organization_id, customer_id, number, amount, currency, status, due_at, created_by, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (id) DO UPDATE SET customer_id=EXCLUDED.customer_id, number=EXCLUDED.number, amount=EXCLUDED.amount, currency=EXCLUDED.currency, status=EXCLUDED.status, due_at=EXCLUDED.due_at, updated_at=EXCLUDED.updated_at", [invoice.id, invoice.organizationId, invoice.customerId ?? null, invoice.number, invoice.amount, invoice.currency, invoice.status, invoice.dueAt ?? null, invoice.createdBy, invoice.createdAt, invoice.updatedAt]);
     for (const payment of data.payments) await client.query("INSERT INTO payments (id, organization_id, invoice_id, customer_id, amount, currency, provider, provider_reference, status, received_at, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (id) DO UPDATE SET invoice_id=EXCLUDED.invoice_id, customer_id=EXCLUDED.customer_id, amount=EXCLUDED.amount, currency=EXCLUDED.currency, provider=EXCLUDED.provider, provider_reference=EXCLUDED.provider_reference, status=EXCLUDED.status, received_at=EXCLUDED.received_at", [payment.id, payment.organizationId, payment.invoiceId ?? null, payment.customerId ?? null, payment.amount, payment.currency, payment.provider, payment.providerReference ?? null, payment.status, payment.receivedAt ?? null, payment.createdAt]);
     for (const event of data.activityEvents) await client.query("INSERT INTO activity_events (id, organization_id, actor_user_id, type, entity_type, entity_id, payload, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (id) DO UPDATE SET payload=EXCLUDED.payload", [event.id, event.organizationId, event.actorUserId, event.type, event.entityType, event.entityId ?? null, event.payload, event.createdAt]);
-    for (const membership of data.memberships) await client.query("INSERT INTO memberships (id, organization_id, user_id, email, role, status, invited_at) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (id) DO UPDATE SET user_id=EXCLUDED.user_id, email=EXCLUDED.email, role=EXCLUDED.role, status=EXCLUDED.status, invited_at=EXCLUDED.invited_at", [membership.id, membership.organizationId, membership.userId ?? null, membership.email, membership.role, membership.status, membership.createdAt]);
+    for (const membership of data.memberships) await client.query("INSERT INTO memberships (id, organization_id, user_id, email, role, status, invited_at, invite_token, invite_expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (id) DO UPDATE SET user_id=EXCLUDED.user_id, email=EXCLUDED.email, role=EXCLUDED.role, status=EXCLUDED.status, invited_at=EXCLUDED.invited_at, invite_token=EXCLUDED.invite_token, invite_expires_at=EXCLUDED.invite_expires_at", [membership.id, membership.organizationId, membership.userId ?? null, membership.email, membership.role, membership.status, membership.createdAt, membership.token ?? null, membership.expiresAt ?? null]);
     for (const token of data.passwordResetTokens) await client.query("INSERT INTO password_reset_tokens (token_hash, user_id, expires_at, used_at) VALUES ($1,$2,$3,$4) ON CONFLICT (token_hash) DO UPDATE SET expires_at=EXCLUDED.expires_at, used_at=EXCLUDED.used_at", [token.tokenHash, token.userId, token.expiresAt, token.usedAt ?? null]);
     for (const token of data.emailVerificationTokens) await client.query("INSERT INTO email_verification_tokens (token_hash, user_id, expires_at, used_at) VALUES ($1,$2,$3,$4) ON CONFLICT (token_hash) DO UPDATE SET expires_at=EXCLUDED.expires_at, used_at=EXCLUDED.used_at", [token.tokenHash, token.userId, token.expiresAt, token.usedAt ?? null]);
     for (const subscription of data.billingSubscriptions) await client.query("INSERT INTO billing_subscriptions (organization_id, plan, status, provider, provider_customer_id, provider_subscription_id, current_period_end, seat_limit, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (organization_id) DO UPDATE SET plan=EXCLUDED.plan, status=EXCLUDED.status, provider=EXCLUDED.provider, provider_customer_id=EXCLUDED.provider_customer_id, provider_subscription_id=EXCLUDED.provider_subscription_id, current_period_end=EXCLUDED.current_period_end, seat_limit=EXCLUDED.seat_limit, updated_at=EXCLUDED.updated_at", [subscription.organizationId, subscription.plan, subscription.status, subscription.provider ?? null, subscription.providerCustomerId ?? null, subscription.providerSubscriptionId ?? null, subscription.currentPeriodEnd ?? null, subscription.seatLimit, subscription.updatedAt]);
@@ -317,6 +332,64 @@ export async function findUserByEmail(email: string) {
   }
   const db = await readDatabase();
   return db.users.find((user) => user.email.toLowerCase() === email.toLowerCase()) ?? null;
+}
+
+export async function listUserMemberships(userId: string) {
+  if (postgresEnabled) {
+    const result = await query<Membership>(`SELECT id, organization_id AS "organizationId", user_id AS "userId", email, role, status, COALESCE(joined_at, invited_at, NOW()) AS "createdAt" FROM memberships WHERE user_id = $1 AND status = 'active' ORDER BY joined_at ASC`, [userId]);
+    return result.rows;
+  }
+  const database = await readDatabase();
+  return database.memberships.filter((membership) => membership.userId === userId && membership.status === "active");
+}
+
+export async function addOrganizationMembership(user: BusinessUser, organizationId: string, role: UserRole = "owner") {
+  const membership: Membership = { id: `mem_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`, organizationId, userId: user.id, email: user.email, role, status: "active", createdAt: new Date().toISOString() };
+  if (postgresEnabled) {
+    await query(`INSERT INTO memberships (id, organization_id, user_id, email, role, status, joined_at) VALUES ($1,$2,$3,$4,$5,'active',NOW())`, [membership.id, organizationId, user.id, user.email, role]);
+    return membership;
+  }
+  const database = await readDatabase();
+  database.memberships.push(membership);
+  await writeDatabase(database);
+  return membership;
+}
+
+export async function acceptOrganizationInvite(token: string, user: BusinessUser) {
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+  if (postgresEnabled) {
+    return withTransaction(async (client) => {
+      const inviteResult = await client.query<Membership>(`SELECT id, organization_id AS "organizationId", user_id AS "userId", email, role, status FROM memberships WHERE invite_token = $1 AND LOWER(email) = LOWER($2) AND status = 'invited' AND invite_expires_at > NOW() FOR UPDATE`, [tokenHash, user.email]);
+      const invite = inviteResult.rows[0];
+      if (!invite) return null;
+      const current = await client.query<Membership>(`SELECT id FROM memberships WHERE organization_id = $1 AND user_id = $2 AND status = 'active' LIMIT 1`, [invite.organizationId, user.id]);
+      if (current.rowCount) {
+        await client.query(`UPDATE memberships SET role = $2 WHERE id = $1`, [current.rows[0].id, invite.role]);
+        await client.query(`UPDATE memberships SET status = 'revoked', invite_token = NULL, invite_expires_at = NULL WHERE id = $1`, [invite.id]);
+        return { ...invite, id: current.rows[0].id, userId: user.id, status: "active" as const };
+      }
+      const accepted = await client.query<Membership>(`UPDATE memberships SET user_id = $2, status = 'active', joined_at = NOW(), invite_token = NULL, invite_expires_at = NULL WHERE id = $1 RETURNING id, organization_id AS "organizationId", user_id AS "userId", email, role, status, NOW() AS "createdAt"`, [invite.id, user.id]);
+      return accepted.rows[0] ?? null;
+    });
+  }
+  const database = await readDatabase();
+  const invite = database.memberships.find((membership) => membership.token === tokenHash && membership.email.toLowerCase() === user.email.toLowerCase() && membership.status === "invited" && (!membership.expiresAt || Date.parse(membership.expiresAt) > Date.now()));
+  if (!invite) return null;
+  const existingMembership = database.memberships.find((membership) => membership.organizationId === invite.organizationId && membership.userId === user.id && membership.status === "active");
+  if (existingMembership) {
+    existingMembership.role = invite.role;
+    invite.status = "revoked";
+    invite.token = undefined;
+    invite.expiresAt = undefined;
+    await writeDatabase(database);
+    return existingMembership;
+  }
+  invite.status = "active";
+  invite.userId = user.id;
+  invite.token = undefined;
+  invite.expiresAt = undefined;
+  await writeDatabase(database);
+  return invite;
 }
 
 export async function findOrganizationById(id: string) {
@@ -363,6 +436,7 @@ export async function createUser(data: {
   };
 
   db.users.push(user);
+  db.memberships.push({ id: `mem_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`, organizationId: user.organizationId, userId: user.id, email: user.email, role: user.role, status: "active", createdAt: user.createdAt });
   await writeDatabase(db);
   return user;
 }

@@ -323,14 +323,14 @@ export async function PATCH(request: NextRequest) {
   const session = await getSessionFromRequest(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const user = await findUserByEmail(session.email);
-  if (!user || user.id !== session.id || user.organizationId !== session.organizationId) return NextResponse.json({ error: "Active workspace membership could not be verified." }, { status: 403 });
-  if (!canPerformAction(user, "all_data_access")) return NextResponse.json({ error: "Only workspace owners and admins can edit the shared business profile." }, { status: 403 });
+  if (!user || user.id !== session.id) return NextResponse.json({ error: "Active workspace membership could not be verified." }, { status: 403 });
+  if (!canPerformAction(session, "all_data_access")) return NextResponse.json({ error: "Only workspace owners and admins can edit the shared business profile." }, { status: 403 });
   const parsed = profileEditSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Enter valid business profile information." }, { status: 400 });
   const profile = await getOrCreateBusinessProfile(user.id, user.organizationId);
   Object.assign(profile, parsed.data, { profileSource: "user_updated", profileUpdatedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
   await saveBusinessProfile(profile);
-  const organization = await findOrganizationById(user.organizationId);
+  const organization = await findOrganizationById(session.organizationId);
   if (organization && (parsed.data.businessName || parsed.data.industry || parsed.data.currency || parsed.data.timezone)) {
     await updateOrganizationProfile(user.organizationId, {
       name: parsed.data.businessName ?? organization.name,

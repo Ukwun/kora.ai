@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    const snapshot = await getTenantSnapshot(user.organizationId);
+    const snapshot = await getTenantSnapshot(session.organizationId);
 
     await logAudit({
       userId: session.id,

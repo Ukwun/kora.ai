@@ -10,24 +10,24 @@ export async function GET(request: NextRequest) {
   const session = await getSessionFromRequest(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const user = await findUserByEmail(session.email);
-  if (!user || user.id !== session.id || user.organizationId !== session.organizationId) return NextResponse.json({ error: "Active workspace membership could not be verified." }, { status: 403 });
-  if (!canPerformAction(user, "view_reports") && !canPerformAction(user, "all_data_access")) return NextResponse.json({ error: "You do not have permission to view workspace reports." }, { status: 403 });
+  if (!user || user.id !== session.id) return NextResponse.json({ error: "Active workspace membership could not be verified." }, { status: 403 });
+  if (!canPerformAction(session, "view_reports") && !canPerformAction(session, "all_data_access")) return NextResponse.json({ error: "You do not have permission to view workspace reports." }, { status: 403 });
 
   const now = new Date();
   const start = new Date(now); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
-  const orgId = user.organizationId;
+  const orgId = session.organizationId;
   const [allInvoices, allCustomers, allTasks] = await Promise.all([
     listOrganizationRecords<Invoice>("invoices", orgId),
     listOrganizationRecords<Customer>("customers", orgId),
     listOrganizationRecords<Task>("tasks", orgId),
   ]);
-  const teamAccess = canPerformAction(user, "view_team_data") || canPerformAction(user, "all_data_access");
+  const teamAccess = canPerformAction(session, "view_team_data") || canPerformAction(session, "all_data_access");
   const invoices = allInvoices.filter((row) => teamAccess || row.createdBy === user.id);
   const customers = allCustomers.filter((row) => teamAccess || row.createdBy === user.id);
   const tasks = allTasks.filter((row) => teamAccess || row.createdBy === user.id || row.assignedTo === user.id);
   const thisWeek = (value: string) => new Date(value) >= start && new Date(value) <= now;
   const memory = isFirebaseAdminConfigured() ? await listBusinessMemoryRecords(orgId, 500) : [];
-  const records = memory.filter((record) => canPerformAction(user, "view_team_data") || canPerformAction(user, "all_data_access") || record.createdBy === user.id);
+  const records = memory.filter((record) => canPerformAction(session, "view_team_data") || canPerformAction(session, "all_data_access") || record.createdBy === user.id);
   const ofType = (type: string) => records.filter((record) => record.entityType === type);
   const expenses = ofType("expense").filter((record) => thisWeek(String(record.data.occurredAt ?? record.createdAt)));
   const weeklyInvoices = invoices.filter((invoice) => thisWeek(invoice.createdAt));
