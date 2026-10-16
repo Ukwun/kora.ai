@@ -1,6 +1,5 @@
 import { query, postgresEnabled } from "./db";
 import { readDatabase } from "./store";
-import { isFirebaseAdminConfigured } from "./firebase-admin";
 import { searchBusinessMemoryRecords, type BusinessMemoryRecord } from "./business-memory-records";
 import { listOrganizationRecords } from "./operations";
 import type { Customer, Invoice, Payment, Task } from "./store";
@@ -140,7 +139,7 @@ export async function answerBusinessQuestion(organizationId: string, question: s
     return { intent, generatedAt: new Date().toISOString(), candidates: [], dataNotice: "Kora can currently answer repurchase-candidate questions from confirmed customer, invoice, and payment records." };
   }
   if (intent === "business_memory") {
-    const memoryRecords = isFirebaseAdminConfigured() ? await searchBusinessMemoryRecords(organizationId, question) : [];
+    const memoryRecords = await searchBusinessMemoryRecords(organizationId, question);
     const [customers, invoices, tasks, payments] = await Promise.all([
       listOrganizationRecords<Customer>("customers", organizationId),
       listOrganizationRecords<Invoice>("invoices", organizationId),
@@ -182,7 +181,7 @@ export async function answerBusinessQuestion(organizationId: string, question: s
       candidates: [],
       memoryRecords: selected,
       sources: selected.map(({ record }) => ({ id: record.id, entityType: record.entityType, title: record.title, source: record.source, verificationStatus: record.verificationStatus, updatedAt: record.updatedAt })),
-      dataNotice: selected.length ? undefined : isFirebaseAdminConfigured() ? "No matching records were found for this question." : "No matching core records were found. Connect Firebase to search structured notes and documents.",
+      dataNotice: selected.length ? undefined : "No matching workspace records were found for this question. Add or connect records, then ask again.",
     };
   }
   const candidates = await getRepurchaseCandidates(organizationId);

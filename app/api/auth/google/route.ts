@@ -1,13 +1,21 @@
-import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { createOAuthState, getOAuthBaseUrl } from "@/lib/social-auth";
 
 export async function GET(request: NextRequest) {
   const clientId = process.env.GOOGLE_CLIENT_ID;
-  const appUrl = process.env.API_BASE_URL;
-  if (!clientId || !appUrl) return NextResponse.json({ error: "Google sign-in is not configured." }, { status: 503 });
+  if (!clientId || !process.env.GOOGLE_CLIENT_SECRET) {
+    return NextResponse.redirect(new URL("/auth?error=oauth_not_configured", request.url));
+  }
 
-  const state = randomUUID();
-  const callbackUrl = `${appUrl.replace(/\/$/, "")}/api/auth/google/callback`;
+  let appUrl: string;
+  try {
+    appUrl = getOAuthBaseUrl(request);
+  } catch {
+    return NextResponse.redirect(new URL("/auth?error=oauth_not_configured", request.url));
+  }
+
+  const state = createOAuthState();
+  const callbackUrl = `${appUrl}/api/auth/google/callback`;
   const authorizationUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
   authorizationUrl.searchParams.set("client_id", clientId);
   authorizationUrl.searchParams.set("redirect_uri", callbackUrl);

@@ -1,10 +1,21 @@
-import { getAdminFirestore } from "./firebase-admin";
+import { getAdminFirestore, isFirebaseAdminConfigured } from "./firebase-admin";
+import {
+  createPersistentBusinessMemoryRecord,
+  decidePersistentBusinessRecommendation,
+  deletePersistentBusinessMemoryRecord,
+  getPersistentBusinessMemoryRecord,
+  listPersistentBusinessMemoryAuditHistory,
+  listPersistentBusinessMemoryRecords,
+  persistentStructuredMemoryId,
+  recordPersistentStructuredEntityMemory,
+  updatePersistentBusinessMemoryRecord,
+} from "./business-memory-persistence";
 
 export const MEMORY_ENTITY_TYPES = [
   "organization_profile", "customer", "lead", "contact", "employee", "team", "product", "service",
   "invoice", "quotation", "payment", "expense", "subscription", "task", "project", "appointment",
   "message", "document", "meeting", "note", "goal", "report", "user_preference", "ai_recommendation",
-  "approved_action", "rejected_action", "integration_event",
+  "approved_action", "rejected_action", "integration_event", "lead_request",
 ] as const;
 
 export type MemoryEntityType = (typeof MEMORY_ENTITY_TYPES)[number];
@@ -48,6 +59,7 @@ const removeUndefined = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) a
 export async function createBusinessMemoryRecord(
   record: Omit<BusinessMemoryRecord, "id" | "createdAt" | "updatedAt" | "deletedAt">,
 ) {
+  if (!isFirebaseAdminConfigured()) return createPersistentBusinessMemoryRecord(record);
   const collection = memoryCollection(record.organizationId);
   const ref = collection.doc();
   const now = new Date().toISOString();
@@ -69,6 +81,7 @@ export async function createBusinessMemoryRecord(
 }
 
 export async function listBusinessMemoryRecords(organizationId: string, limit = 50) {
+  if (!isFirebaseAdminConfigured()) return listPersistentBusinessMemoryRecords(organizationId, limit);
   const result = await memoryCollection(organizationId).orderBy("createdAt", "desc").limit(limit).get();
   return result.docs.map((document) => document.data() as BusinessMemoryRecord).filter((record) => !record.deletedAt);
 }
@@ -87,6 +100,7 @@ export async function searchBusinessMemoryRecords(organizationId: string, questi
 }
 
 export async function getBusinessMemoryRecord(organizationId: string, recordId: string) {
+  if (!isFirebaseAdminConfigured()) return getPersistentBusinessMemoryRecord(organizationId, recordId);
   const snapshot = await memoryCollection(organizationId).doc(recordId).get();
   if (!snapshot.exists) return null;
   const record = snapshot.data() as BusinessMemoryRecord;
@@ -94,6 +108,7 @@ export async function getBusinessMemoryRecord(organizationId: string, recordId: 
 }
 
 export async function listBusinessMemoryAuditHistory(organizationId: string, recordId: string) {
+  if (!isFirebaseAdminConfigured()) return listPersistentBusinessMemoryAuditHistory(organizationId, recordId);
   const snapshot = await memoryCollection(organizationId).doc(recordId).collection("auditHistory").orderBy("createdAt", "desc").limit(100).get();
   return snapshot.docs.map((document) => document.data() as MemoryAuditEvent);
 }
@@ -104,6 +119,7 @@ export async function updateBusinessMemoryRecord(
   actorUserId: string,
   changes: Partial<Pick<BusinessMemoryRecord, "title" | "summary" | "data" | "status" | "verificationStatus" | "confidenceScore" | "tags">>,
 ) {
+  if (!isFirebaseAdminConfigured()) return updatePersistentBusinessMemoryRecord(organizationId, recordId, actorUserId, changes);
   const ref = memoryCollection(organizationId).doc(recordId);
   const auditRef = ref.collection("auditHistory").doc();
   const now = new Date().toISOString();
@@ -135,6 +151,7 @@ export async function decideBusinessRecommendation(
   decision: "approved" | "rejected",
   changes: Partial<Pick<BusinessMemoryRecord, "title" | "summary" | "data" | "verificationStatus" | "confidenceScore" | "tags">> = {},
 ) {
+  if (!isFirebaseAdminConfigured()) return decidePersistentBusinessRecommendation(organizationId, recordId, actorUserId, decision, changes);
   const database = getAdminFirestore();
   const recordRef = memoryCollection(organizationId).doc(recordId);
   const decisionRef = memoryCollection(organizationId).doc();
@@ -174,6 +191,7 @@ export async function decideBusinessRecommendation(
 }
 
 export async function deleteBusinessMemoryRecord(organizationId: string, recordId: string, actorUserId: string) {
+  if (!isFirebaseAdminConfigured()) return deletePersistentBusinessMemoryRecord(organizationId, recordId, actorUserId);
   const ref = memoryCollection(organizationId).doc(recordId);
   const auditRef = ref.collection("auditHistory").doc();
   const now = new Date().toISOString();
@@ -199,6 +217,7 @@ export async function recordStructuredEntityMemory(input: {
   source?: MemorySource;
   verificationStatus?: MemoryVerification;
 }) {
+  if (!isFirebaseAdminConfigured()) return recordPersistentStructuredEntityMemory(input);
   const database = getAdminFirestore();
   const ref = memoryCollection(input.organizationId).doc(`${input.entityType}_${input.entityId}`);
   const auditRef = ref.collection("auditHistory").doc();
@@ -232,3 +251,9 @@ export async function recordStructuredEntityMemory(input: {
   return saved!;
 }
 
+export async function deleteStructuredEntityMemory(organizationId: string, entityType: MemoryEntityType, entityId: string, actorUserId: string) {
+  const recordId = isFirebaseAdminConfigured()
+    ? `${entityType}_${entityId}`
+    : persistentStructuredMemoryId(organizationId, entityType, entityId);
+  return deleteBusinessMemoryRecord(organizationId, recordId, actorUserId);
+}

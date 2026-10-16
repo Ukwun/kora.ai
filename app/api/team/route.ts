@@ -15,7 +15,9 @@ export async function GET(request: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const database = await readDatabase();
   const members = database.memberships.filter((member) => member.organizationId === session.organizationId && member.status === "active").map((member) => { const user = database.users.find((entry) => entry.id === member.userId); return user && user.accountStatus !== "suspended" ? { id: user.id, name: user.name, email: user.email, role: member.role, organizationId: member.organizationId, createdAt: user.createdAt } : null; }).filter(Boolean);
-  const invites = database.memberships.filter((member) => member.organizationId === session.organizationId && member.status === "invited" && (!member.expiresAt || Date.parse(member.expiresAt) > Date.now())).map((member) => Object.fromEntries(Object.entries(member).filter(([key]) => key !== "token")));
+  const invites = canPerformAction(session, "create_user")
+    ? database.memberships.filter((member) => member.organizationId === session.organizationId && member.status === "invited" && (!member.expiresAt || Date.parse(member.expiresAt) > Date.now())).map((member) => Object.fromEntries(Object.entries(member).filter(([key]) => key !== "token")))
+    : [];
   return NextResponse.json({ success: true, data: { members, invites } });
 }
 

@@ -1,20 +1,22 @@
-import { randomBytes } from "node:crypto";
-import bcrypt from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
-import { createOrganization, createUser, findUserByEmail, readDatabase, writeDatabase } from "@/lib/store";
-import { setSessionCookie } from "@/lib/session";
+import { getOAuthBaseUrl, signInWithVerifiedOAuthEmail } from "@/lib/social-auth";
 
 type GoogleTokenResponse = { access_token?: string; error?: string; error_description?: string };
 type GoogleProfile = { email?: string; name?: string; email_verified?: boolean };
 
 export async function GET(request: NextRequest) {
-  const appUrl = process.env.API_BASE_URL?.replace(/\/$/, "");
+  let appUrl: string;
+  try {
+    appUrl = getOAuthBaseUrl(request);
+  } catch {
+    return NextResponse.redirect(new URL("/auth?error=oauth_not_configured", request.url));
+  }
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   const code = request.nextUrl.searchParams.get("code");
   const state = request.nextUrl.searchParams.get("state");
   const expectedState = request.cookies.get("kora_google_oauth_state")?.value;
-  if (!appUrl || !clientId || !clientSecret || !code || !state || state !== expectedState) {
+  if (request.nextUrl.searchParams.has("error") || !clientId || !clientSecret || !code || !state || state !== expectedState) {
     return NextResponse.redirect(new URL("/auth?error=google_auth", request.url));
   }
 
@@ -32,21 +34,11 @@ export async function GET(request: NextRequest) {
     const profile = await profileResponse.json() as GoogleProfile;
     if (!profileResponse.ok || !profile.email || !profile.email_verified) throw new Error("Google did not return a verified email address");
 
-    let user = await findUserByEmail(profile.email);
-    if (user?.accountStatus === "suspended") throw new Error("This account is unavailable.");
-    if (!user) {
-      const organization = await createOrganization({ name: `${(profile.name || profile.email).trim()}'s workspace`, industry: "Other", timezone: "Africa/Lagos", currency: "NGN" });
-      user = await createUser({ name: profile.name?.trim() || profile.email.split("@")[0], email: profile.email, passwordHash: await bcrypt.hash(randomBytes(32).toString("hex"), 12), role: "owner", organizationId: organization.id });
-    } else if (user.emailVerified === false) {
-      const database = await readDatabase();
-      const storedUser = database.users.find((entry) => entry.id === user?.id);
-      if (storedUser) { storedUser.emailVerified = true; await writeDatabase(database); user.emailVerified = true; }
-    }
-
-    const response = NextResponse.redirect(new URL("/onboarding", request.url));
+    const response = await signInWithVerifiedOAuthEmail(request, { email: profile.email, name: profile.name, emailVerified: profile.email_verified === true });
     response.cookies.delete("kora_google_oauth_state");
-    return setSessionCookie(response, { id: user.id, name: user.name, email: user.email, role: user.role, organizationId: user.organizationId });
-  } catch {
+    return response;
+  } catch (error) {
+    console.error("Google OAuth callback failed.", error);
     return NextResponse.redirect(new URL("/auth?error=google_auth", request.url));
   }
 }

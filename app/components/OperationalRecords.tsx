@@ -5,8 +5,9 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 type Kind = "lead" | "expense" | "project" | "product" | "service" | "inventory" | "quotation" | "appointment" | "meeting" | "document";
 type RecordItem = { id: string; entityType: Kind; title: string; summary: string; createdAt: string; data: Record<string, unknown> };
 const kinds: { id: Kind; label: string }[] = [{ id: "lead", label: "Lead" }, { id: "expense", label: "Expense" }, { id: "project", label: "Project" }, { id: "product", label: "Product" }, { id: "service", label: "Service" }, { id: "inventory", label: "Inventory" }, { id: "quotation", label: "Quotation" }, { id: "appointment", label: "Appointment" }, { id: "meeting", label: "Meeting" }, { id: "document", label: "Document" }];
+export const DASHBOARD_DATA_CHANGED_EVENT = "kora:dashboard-data-changed";
 
-export default function OperationalRecords({ canManage, canDelete = false }: { canManage: boolean; canDelete?: boolean }) {
+export default function OperationalRecords({ canManage, canDelete = false, currency }: { canManage: boolean; canDelete?: boolean; currency: string }) {
   const [kind, setKind] = useState<Kind>("lead");
   const [records, setRecords] = useState<RecordItem[]>([]);
   const [fields, setFields] = useState<Record<string, string>>({});
@@ -18,41 +19,45 @@ export default function OperationalRecords({ canManage, canDelete = false }: { c
   const load = useCallback(async () => {
     const response = await fetch("/api/records", { cache: "no-store" });
     if (response.ok) { const body = await response.json(); setRecords(body.data ?? []); }
-    else if (response.status === 503) setNotice("Configure Firebase Admin to save and share these structured records.");
+    else if (response.status === 503) setNotice("Structured records are temporarily unavailable. Check the workspace storage configuration.");
   }, []);
   useEffect(() => { const timer = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timer); }, [load]);
   function changeKind(value: Kind) { setKind(value); setFields({}); setNotice(""); }
   function field(key: string, label: string, type = "text", optional = false) {
-    return <label key={key} className="block text-xs text-slate-400">{label}{optional && " (optional)"}<input value={fields[key] ?? ""} onChange={(event) => setFields((old) => ({ ...old, [key]: event.target.value }))} type={type} required={!optional} min={type === "number" ? "0" : undefined} className="mt-1 w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white outline-none focus:border-violet-400" /></label>;
+    const currencyFields = ["value", "amount", "budget", "price", "cost", "unitCost"];
+    const visibleLabel = currencyFields.includes(key) ? `${label} (${fields.currency || currency})` : label;
+    return <label key={key} className="block text-xs text-slate-400">{visibleLabel}{optional && " (optional)"}<input value={fields[key] ?? ""} onChange={(event) => setFields((old) => ({ ...old, [key]: event.target.value }))} type={type} required={!optional} min={type === "number" ? "0" : undefined} className="mt-1 w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white outline-none focus:border-violet-400" /></label>;
   }
   async function save() {
     const number = (key: string) => Number(fields[key]);
     const date = (key: string) => new Date(fields[key]).toISOString();
+    const recordCurrency = fields.currency || currency;
     let data: Record<string, unknown>;
-    if (kind === "lead") data = { name: fields.name, company: fields.company || undefined, email: fields.email || undefined, phone: fields.phone || undefined, stage: fields.stage || "new", value: fields.value ? number("value") : undefined, currency: fields.currency || "NGN", followUpAt: fields.followUpAt ? date("followUpAt") : undefined, notes: fields.notes || undefined };
-    else if (kind === "expense") data = { description: fields.description, amount: number("amount"), currency: fields.currency || "NGN", category: fields.category, supplier: fields.supplier || undefined, occurredAt: date("occurredAt"), paymentMethod: fields.paymentMethod || undefined };
-    else if (kind === "project") data = { name: fields.name, status: fields.status || "planned", customer: fields.customer || undefined, dueAt: fields.dueAt ? date("dueAt") : undefined, budget: fields.budget ? number("budget") : undefined, currency: fields.currency || "NGN", progress: fields.progress ? number("progress") : 0 };
-    else if (kind === "product") data = { name: fields.name, sku: fields.sku || undefined, price: number("price"), cost: fields.cost ? number("cost") : undefined, currency: fields.currency || "NGN", stock: fields.stock ? number("stock") : undefined, reorderLevel: fields.reorderLevel ? number("reorderLevel") : undefined };
-    else if (kind === "service") data = { name: fields.name, price: number("price"), currency: fields.currency || "NGN", billingUnit: fields.billingUnit || undefined, description: fields.description || undefined };
-    else if (kind === "inventory") data = { name: fields.name, sku: fields.sku || undefined, quantity: number("quantity"), reorderLevel: number("reorderLevel"), unitCost: fields.unitCost ? number("unitCost") : undefined, currency: fields.currency || "NGN", supplier: fields.supplier || undefined };
+    if (kind === "lead") data = { name: fields.name, company: fields.company || undefined, email: fields.email || undefined, phone: fields.phone || undefined, stage: fields.stage || "new", value: fields.value ? number("value") : undefined, currency: recordCurrency, followUpAt: fields.followUpAt ? date("followUpAt") : undefined, notes: fields.notes || undefined };
+    else if (kind === "expense") data = { description: fields.description, amount: number("amount"), currency: recordCurrency, category: fields.category, supplier: fields.supplier || undefined, occurredAt: date("occurredAt"), paymentMethod: fields.paymentMethod || undefined };
+    else if (kind === "project") data = { name: fields.name, status: fields.status || "planned", customer: fields.customer || undefined, dueAt: fields.dueAt ? date("dueAt") : undefined, budget: fields.budget ? number("budget") : undefined, currency: recordCurrency, progress: fields.progress ? number("progress") : 0 };
+    else if (kind === "product") data = { name: fields.name, sku: fields.sku || undefined, price: number("price"), cost: fields.cost ? number("cost") : undefined, currency: recordCurrency, stock: fields.stock ? number("stock") : undefined, reorderLevel: fields.reorderLevel ? number("reorderLevel") : undefined };
+    else if (kind === "service") data = { name: fields.name, price: number("price"), currency: recordCurrency, billingUnit: fields.billingUnit || undefined, description: fields.description || undefined };
+    else if (kind === "inventory") data = { name: fields.name, sku: fields.sku || undefined, quantity: number("quantity"), reorderLevel: number("reorderLevel"), unitCost: fields.unitCost ? number("unitCost") : undefined, currency: recordCurrency, supplier: fields.supplier || undefined };
+    else if (kind === "quotation") data = { number: fields.number, customer: fields.customer, amount: number("amount"), currency: recordCurrency, status: "draft", validUntil: fields.validUntil ? date("validUntil") : undefined, lastFollowUpAt: fields.lastFollowUpAt ? date("lastFollowUpAt") : undefined, notes: fields.notes || undefined };
     else if (kind === "appointment") data = { title: fields.title, contact: fields.contact || undefined, startsAt: date("startsAt"), endsAt: fields.endsAt ? date("endsAt") : undefined, location: fields.location || undefined, status: fields.status || "scheduled", notes: fields.notes || undefined };
     else if (kind === "meeting") data = { title: fields.title, startsAt: fields.startsAt ? date("startsAt") : undefined, attendees: (fields.attendees || "").split(",").map((v) => v.trim()).filter(Boolean), notes: fields.notes, decisions: (fields.decisions || "").split("\n").map((v) => v.trim()).filter(Boolean) };
     else data = { filename: fields.filename, mimeType: fields.mimeType || "text/plain", extractedText: fields.extractedText, tags: [] };
     setSaving(true); setNotice("");
-    try { const response = await fetch("/api/records", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entityType: kind, data }) }); const body = await response.json(); if (!response.ok) throw new Error(body.error || "Unable to save record."); setFields({}); setNotice(`${kinds.find((item) => item.id === kind)?.label} saved to this workspace.`); await load(); }
+    try { const response = await fetch("/api/records", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entityType: kind, data }) }); const body = await response.json(); if (!response.ok) throw new Error(body.error || "Unable to save record."); setFields({}); setNotice(`${kinds.find((item) => item.id === kind)?.label} saved to this workspace.`); await load(); window.dispatchEvent(new Event(DASHBOARD_DATA_CHANGED_EVENT)); }
     catch (error) { setNotice(error instanceof Error ? error.message : "Unable to save record."); } finally { setSaving(false); }
   }
   async function saveEdit(record: RecordItem) {
     let data: Record<string, unknown>;
     try { data = JSON.parse(editDraft) as Record<string, unknown>; } catch { setNotice("Enter valid JSON for this structured record."); return; }
     setSaving(true); setNotice("");
-    try { const response = await fetch(`/api/records?id=${encodeURIComponent(record.id)}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: String(data.name ?? data.title ?? data.number ?? data.filename ?? data.description ?? record.title), data }) }); const result = await response.json(); if (!response.ok) throw new Error(result.error ?? "Record update failed."); setEditingId(null); await load(); setNotice("Record updated and audit history recorded."); }
+    try { const response = await fetch(`/api/records?id=${encodeURIComponent(record.id)}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: String(data.name ?? data.title ?? data.number ?? data.filename ?? data.description ?? record.title), data }) }); const result = await response.json(); if (!response.ok) throw new Error(result.error ?? "Record update failed."); setEditingId(null); await load(); window.dispatchEvent(new Event(DASHBOARD_DATA_CHANGED_EVENT)); setNotice("Record updated and audit history recorded."); }
     catch (cause) { setNotice(cause instanceof Error ? cause.message : "Record update failed."); } finally { setSaving(false); }
   }
   async function removeRecord(record: RecordItem) {
     if (!window.confirm(`Delete ${record.title} from this workspace? This action is recorded in audit history.`)) return;
     setSaving(true); setNotice("");
-    try { const response = await fetch(`/api/records?id=${encodeURIComponent(record.id)}`, { method: "DELETE" }); const result = await response.json(); if (!response.ok) throw new Error(result.error ?? "Record deletion failed."); await load(); setNotice("Record deleted and audit history recorded."); }
+    try { const response = await fetch(`/api/records?id=${encodeURIComponent(record.id)}`, { method: "DELETE" }); const result = await response.json(); if (!response.ok) throw new Error(result.error ?? "Record deletion failed."); await load(); window.dispatchEvent(new Event(DASHBOARD_DATA_CHANGED_EVENT)); setNotice("Record deleted and audit history recorded."); }
     catch (cause) { setNotice(cause instanceof Error ? cause.message : "Record deletion failed."); } finally { setSaving(false); }
   }
   async function inspectHistory(record: RecordItem) {
@@ -71,7 +76,7 @@ export function BusinessAssistant() {
   const [error, setError] = useState("");
   async function ask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (!question.trim() || busy) return; setBusy(true); setError("");
-    try { const response = await fetch("/api/ai", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "chat", messages: [{ role: "user", content: question.trim() }] }) }); const result = await response.json(); if (!response.ok) throw new Error(result.error ?? "Kora could not answer this yet."); setAnswer(result.data.message ?? result.data.dataNotice ?? "I do not have enough recorded evidence to answer that yet."); setSources(result.data.sources ?? []); }
+    try { const response = await fetch("/api/ai", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "chat", messages: [{ role: "user", content: question.trim() }] }) }); const result = await response.json().catch(() => null) as { error?: string; data?: { message?: string; dataNotice?: string; sources?: typeof sources } } | null; if (!response.ok) throw new Error(result?.error ?? "Kora could not complete the request. Please try again."); if (!result?.data) throw new Error("Kora returned an invalid response. Please try again."); setAnswer(result.data.message ?? result.data.dataNotice ?? "I do not have enough recorded evidence to answer that yet."); setSources(result.data.sources ?? []); }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Kora could not answer this yet."); } finally { setBusy(false); }
   }
   async function inspect(id: string) { const response = await fetch(`/api/memory?id=${encodeURIComponent(id)}`, { cache: "no-store" }); const result = await response.json(); if (response.ok) setDetail(result.data); else setError(result.error ?? "The supporting record is unavailable."); }
@@ -92,13 +97,14 @@ export function TeamWorkspace({ canAdminister }: { canAdminister: boolean }) {
 
 export function WeeklyBusinessReport() {
   const [report, setReport] = useState<{ period: { label: string; start: string; end: string }; metrics: Record<string, { value?: number; count?: number; averageProgress?: number | null; won?: number; lost?: number; totalCreated?: number; overdueValue?: number; products?: number; services?: number; available: boolean; emptyReason?: string; currency?: string }>; caveat: string } | null>(null);
-  useEffect(() => { const timer = window.setTimeout(() => { void fetch("/api/weekly-report", { cache: "no-store" }).then(async (response) => response.ok ? response.json() : null).then((body) => setReport(body?.data ?? null)).catch(() => setReport(null)); }, 0); return () => window.clearTimeout(timer); }, []);
+  const refresh = useCallback(() => { void fetch("/api/weekly-report", { cache: "no-store" }).then(async (response) => response.ok ? response.json() : null).then((body) => setReport(body?.data ?? null)).catch(() => setReport(null)); }, []);
+  useEffect(() => { const timer = window.setTimeout(refresh, 0); window.addEventListener(DASHBOARD_DATA_CHANGED_EVENT, refresh); return () => { window.clearTimeout(timer); window.removeEventListener(DASHBOARD_DATA_CHANGED_EVENT, refresh); }; }, [refresh]);
   if (!report) return null;
   const fmt = (value: number, currency = "NGN") => new Intl.NumberFormat("en-NG", { style: "currency", currency, maximumFractionDigits: 0 }).format(value);
   const metrics = report.metrics;
   const cards = [
-    ["Paid invoices", metrics.paidInvoiceValue.available ? `${fmt(metrics.paidInvoiceValue.value ?? 0)} · ${metrics.paidInvoiceValue.count ?? 0} records` : "Unavailable"],
-    ["Outstanding invoices", `${metrics.outstandingInvoices.value ?? 0} · ${fmt(metrics.outstandingInvoices.overdueValue ?? 0)} overdue`],
+    ["Paid invoices", metrics.paidInvoiceValue.available ? `${fmt(metrics.paidInvoiceValue.value ?? 0, metrics.paidInvoiceValue.currency)} · ${metrics.paidInvoiceValue.count ?? 0} records` : "Unavailable"],
+    ["Outstanding invoices", `${metrics.outstandingInvoices.value ?? 0} · ${fmt(metrics.outstandingInvoices.overdueValue ?? 0, metrics.outstandingInvoices.currency)} overdue`],
     ["New customers", String(metrics.newCustomers.value ?? 0)],
     ["Tasks completed", `${metrics.tasksCompleted.value ?? 0} / ${metrics.tasksCompleted.totalCreated ?? 0}`],
     ["Expenses recorded", metrics.expenses.available ? `${fmt(metrics.expenses.value ?? 0, metrics.expenses.currency)} · ${metrics.expenses.count ?? 0} records` : "No records yet"],
@@ -128,7 +134,7 @@ export function BusinessProfileEditor({ canEdit }: { canEdit: boolean }) {
     const list = (key: string) => text(key).split(",").map((value) => value.trim()).filter(Boolean);
     const draft: Record<string, unknown> = { businessName: text("businessName"), industry: text("industry"), type: text("type"), country: text("country"), currency: text("currency").toUpperCase(), timezone: text("timezone"), employees: text("employees") ? Number(profile.employees) : undefined, customersPerMonth: text("customersPerMonth") ? Number(profile.customersPerMonth) : undefined, monthlyRevenueRange: text("monthlyRevenueRange"), offerings: list("offerings"), goals: list("goals"), existingSoftware: list("existingSoftware"), communicationChannels: list("communicationChannels"), preferredPaymentMethods: list("preferredPaymentMethods"), workingHours: text("workingHours"), reportingPreferences: list("reportingPreferences") };
     const body = Object.fromEntries(Object.entries(draft).filter(([, value]) => value !== "" && value !== undefined));
-    try { const response = await fetch("/api/onboarding", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); const result = await response.json(); if (!response.ok) throw new Error(result.error || "Unable to save profile."); setProfile(result.profile); setNotice("Business profile updated. Kora will use this as your latest owner-provided context."); }
+    try { const response = await fetch("/api/onboarding", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); const result = await response.json(); if (!response.ok) throw new Error(result.error || "Unable to save profile."); setProfile(result.profile); setNotice("Business profile updated. Kora will use this as your latest owner-provided context."); window.dispatchEvent(new Event(DASHBOARD_DATA_CHANGED_EVENT)); }
     catch (error) { setNotice(error instanceof Error ? error.message : "Unable to save profile."); }
     finally { setSaving(false); }
   }

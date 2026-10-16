@@ -4,8 +4,8 @@ import { createHash } from "node:crypto";
 import bcrypt from "bcryptjs";
 import type { BusinessProfile } from "./business-profile";
 import { postgresEnabled, query, withTransaction } from "./db";
-import { isFirebaseAdminConfigured } from "./firebase-admin";
 import { recordStructuredEntityMemory } from "./business-memory-records";
+import type { BusinessMemoryRecord, MemoryAuditEvent } from "./business-memory-records";
 
 export type UserRole = "owner" | "admin" | "manager" | "employee";
 
@@ -99,6 +99,7 @@ export type ActivityEvent = {
   id: string;
   organizationId: string;
   actorUserId: string;
+  actorName?: string;
   type: string;
   entityType: string;
   entityId?: string;
@@ -154,6 +155,8 @@ export type AppDatabase = {
   passwordResetTokens: PasswordResetToken[];
   emailVerificationTokens: EmailVerificationToken[];
   billingSubscriptions: BillingSubscription[];
+  businessMemoryRecords: BusinessMemoryRecord[];
+  businessMemoryAuditEvents: MemoryAuditEvent[];
 };
 
 const dataDir = path.join(process.cwd(), "data");
@@ -181,6 +184,8 @@ function defaultDatabaseForDevelopment(): AppDatabase {
     passwordResetTokens: [],
     emailVerificationTokens: [],
     billingSubscriptions: [],
+    businessMemoryRecords: [],
+    businessMemoryAuditEvents: [],
   };
 }
 
@@ -252,6 +257,8 @@ export async function readDatabase(): Promise<AppDatabase> {
       passwordResetTokens: parsed.passwordResetTokens ?? defaultDatabase.passwordResetTokens,
       emailVerificationTokens: parsed.emailVerificationTokens ?? defaultDatabase.emailVerificationTokens,
       billingSubscriptions: parsed.billingSubscriptions ?? defaultDatabase.billingSubscriptions,
+      businessMemoryRecords: parsed.businessMemoryRecords ?? defaultDatabase.businessMemoryRecords,
+      businessMemoryAuditEvents: parsed.businessMemoryAuditEvents ?? defaultDatabase.businessMemoryAuditEvents,
     };
     if (!parsed.schemaVersion || parsed.schemaVersion < 1) await writeDatabase(database);
     return database;
@@ -301,6 +308,8 @@ async function readPostgresDatabase(): Promise<AppDatabase> {
     passwordResetTokens: passwordResetTokens.rows,
     emailVerificationTokens: emailVerificationTokens.rows,
     billingSubscriptions: billingSubscriptions.rows,
+    businessMemoryRecords: [],
+    businessMemoryAuditEvents: [],
   };
 }
 
@@ -525,44 +534,42 @@ export async function saveBusinessProfile(profile: BusinessProfile) {
   }
 
   await writeDatabase(db);
-  if (isFirebaseAdminConfigured()) {
-    try {
-      await recordStructuredEntityMemory({
-        organizationId: profile.organizationId,
-        createdBy: profile.userId,
-        entityType: "organization_profile",
-        entityId: profile.id,
-        title: profile.businessName || "Business profile",
-        summary: `${profile.industry || profile.type} business · ${profile.employees} employees · focus: ${profile.mainChallenge.replace(/_/g, " ")}`,
-        source: "user_confirmed",
-        verificationStatus: "user_confirmed",
-        data: {
-          businessName: profile.businessName,
-          industry: profile.industry,
-          country: profile.country,
-          currency: profile.currency,
-          timezone: profile.timezone,
-          type: profile.type,
-          employees: profile.employees,
-          customersPerMonth: profile.customersPerMonth,
-          monthlyRevenueRange: profile.monthlyRevenueRange,
-          offerings: profile.offerings,
-          goals: profile.goals,
-          communicationChannels: profile.communicationChannels,
-          preferredPaymentMethods: profile.preferredPaymentMethods,
-          workingHours: profile.workingHours,
-          reportingPreferences: profile.reportingPreferences,
-          software: profile.existingSoftware,
-          mainChallenge: profile.mainChallenge,
-          profileSource: profile.profileSource,
-          profileUpdatedAt: profile.profileUpdatedAt,
-          integrations: profile.integrations.map(({ type, connected, connectedAt }) => ({ type, connected, connectedAt })),
-          onboardingComplete: profile.onboardingComplete,
-        },
-      });
-    } catch (error) {
-      console.error("Unable to mirror the saved business profile into Firebase memory.", error);
-    }
+  try {
+    await recordStructuredEntityMemory({
+      organizationId: profile.organizationId,
+      createdBy: profile.userId,
+      entityType: "organization_profile",
+      entityId: profile.id,
+      title: profile.businessName || "Business profile",
+      summary: `${profile.industry || profile.type} business · ${profile.employees} employees · focus: ${profile.mainChallenge.replace(/_/g, " ")}`,
+      source: "user_confirmed",
+      verificationStatus: "user_confirmed",
+      data: {
+        businessName: profile.businessName,
+        industry: profile.industry,
+        country: profile.country,
+        currency: profile.currency,
+        timezone: profile.timezone,
+        type: profile.type,
+        employees: profile.employees,
+        customersPerMonth: profile.customersPerMonth,
+        monthlyRevenueRange: profile.monthlyRevenueRange,
+        offerings: profile.offerings,
+        goals: profile.goals,
+        communicationChannels: profile.communicationChannels,
+        preferredPaymentMethods: profile.preferredPaymentMethods,
+        workingHours: profile.workingHours,
+        reportingPreferences: profile.reportingPreferences,
+        software: profile.existingSoftware,
+        mainChallenge: profile.mainChallenge,
+        profileSource: profile.profileSource,
+        profileUpdatedAt: profile.profileUpdatedAt,
+        integrations: profile.integrations.map(({ type, connected, connectedAt }) => ({ type, connected, connectedAt })),
+        onboardingComplete: profile.onboardingComplete,
+      },
+    });
+  } catch (error) {
+    console.error("Unable to mirror the saved business profile into business memory.", error);
   }
   return profile;
 }

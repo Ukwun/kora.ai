@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/session";
-import { findUserByEmail, type Customer, type Invoice, type Task } from "@/lib/store";
+import { findOrganizationById, findUserByEmail, type Customer, type Invoice, type Task } from "@/lib/store";
 import { listOrganizationRecords } from "@/lib/operations";
 import { canPerformAction } from "@/lib/security";
-import { isFirebaseAdminConfigured } from "@/lib/firebase-admin";
 import { listBusinessMemoryRecords } from "@/lib/business-memory-records";
 
 export async function GET(request: NextRequest) {
@@ -16,17 +15,19 @@ export async function GET(request: NextRequest) {
   const now = new Date();
   const start = new Date(now); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
   const orgId = session.organizationId;
-  const [allInvoices, allCustomers, allTasks] = await Promise.all([
+  const [allInvoices, allCustomers, allTasks, organization] = await Promise.all([
     listOrganizationRecords<Invoice>("invoices", orgId),
     listOrganizationRecords<Customer>("customers", orgId),
     listOrganizationRecords<Task>("tasks", orgId),
+    findOrganizationById(orgId),
   ]);
+  const currency = organization?.currency ?? "NGN";
   const teamAccess = canPerformAction(session, "view_team_data") || canPerformAction(session, "all_data_access");
   const invoices = allInvoices.filter((row) => teamAccess || row.createdBy === user.id);
   const customers = allCustomers.filter((row) => teamAccess || row.createdBy === user.id);
   const tasks = allTasks.filter((row) => teamAccess || row.createdBy === user.id || row.assignedTo === user.id);
   const thisWeek = (value: string) => new Date(value) >= start && new Date(value) <= now;
-  const memory = isFirebaseAdminConfigured() ? await listBusinessMemoryRecords(orgId, 500) : [];
+  const memory = await listBusinessMemoryRecords(orgId, 500);
   const records = memory.filter((record) => canPerformAction(session, "view_team_data") || canPerformAction(session, "all_data_access") || record.createdBy === user.id);
   const ofType = (type: string) => records.filter((record) => record.entityType === type);
   const expenses = ofType("expense").filter((record) => thisWeek(String(record.data.occurredAt ?? record.createdAt)));
@@ -43,11 +44,11 @@ export async function GET(request: NextRequest) {
   const report = {
     generatedAt: now.toISOString(), period: { start: start.toISOString(), end: now.toISOString(), label: "Week to date" },
     metrics: {
-      paidInvoiceValue: { value: paidAmount, count: weeklyInvoices.filter((i) => i.status === "paid").length, source: "paid invoices created this week", available: true },
-      outstandingInvoices: { value: invoices.filter((i) => !["paid", "cancelled"].includes(i.status)).length, overdueValue: overdue.reduce((sum, invoice) => sum + Number(invoice.amount), 0), source: "workspace invoice records", available: true },
+      paidInvoiceValue: { value: paidAmount, count: weeklyInvoices.filter((i) => i.status === "paid").length, currency: weeklyInvoices.find((i) => i.status === "paid")?.currency ?? currency, source: "paid invoices created this week", available: true },
+      outstandingInvoices: { value: invoices.filter((i) => !["paid", "cancelled"].includes(i.status)).length, overdueValue: overdue.reduce((sum, invoice) => sum + Number(invoice.amount), 0), currency: overdue[0]?.currency ?? currency, source: "workspace invoice records", available: true },
       newCustomers: { value: newCustomers.length, source: "customer records created this week", available: true },
       tasksCompleted: { value: weeklyTasks.filter((task) => task.status === "done").length, totalCreated: weeklyTasks.length, source: "tasks created this week", available: true },
-      expenses: { value: expenseTotal, count: expenses.length, currency: expenses[0]?.data.currency ?? "NGN", source: "expense records dated this week", available: expenses.length > 0, emptyReason: expenses.length ? undefined : "No expense records are available for this period." },
+      expenses: { value: expenseTotal, count: expenses.length, currency: expenses[0]?.data.currency ?? currency, source: "expense records dated this week", available: expenses.length > 0, emptyReason: expenses.length ? undefined : "No expense records are available for this period." },
       leads: { value: leads.filter((lead) => thisWeek(lead.createdAt)).length, won, lost, source: "structured lead records", available: leads.length > 0, emptyReason: leads.length ? undefined : "No lead records are available." },
       projects: { value: projects.length, averageProgress: projects.length ? Math.round(projects.reduce((sum, project) => sum + Number(project.data.progress ?? 0), 0) / projects.length) : null, source: "structured project records", available: projects.length > 0, emptyReason: projects.length ? undefined : "No project records are available." },
       productsAndServices: { products: ofType("product").length, services: ofType("service").length, available: ofType("product").length + ofType("service").length > 0 },

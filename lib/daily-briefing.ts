@@ -16,6 +16,7 @@ export function buildDailyBriefing(records: {
   invoices: Invoice[];
   tasks: Task[];
   memory?: Array<{ id: string; entityType: string; title: string; status: string; data: Record<string, unknown>; createdAt: string }>;
+  profile?: { mainChallenge?: string };
 }, now = new Date()) {
   const today = dayStart(now);
   const tomorrow = new Date(today);
@@ -63,11 +64,22 @@ export function buildDailyBriefing(records: {
   const weekCustomers = records.customers.filter((customer) => new Date(customer.createdAt) >= weekStart);
   const weekInvoices = records.invoices.filter((invoice) => new Date(invoice.createdAt) >= weekStart);
   const weekPaid = weekInvoices.filter((invoice) => invoice.status === "paid").reduce((sum, invoice) => sum + Number(invoice.amount), 0);
+  const strategies: Record<string, { title: string; detail: string }> = {
+    finding_customers: { title: "Run one focused outreach experiment", detail: "Choose one professional audience and one clear offer for this week. Record each enquiry and where it came from before increasing your spend." },
+    following_up: { title: "Set aside a daily follow-up block", detail: "Use a short, recurring block to review open tasks and quotations. Record the next step and its owner so promising conversations do not get lost." },
+    marketing: { title: "Measure one marketing channel at a time", detail: "Record enquiries alongside their source this week, then compare which channel brings relevant conversations before changing your budget." },
+    cash_flow: { title: "Review money due before making new commitments", detail: "Check upcoming invoices and recorded expenses together, then confirm expected payment dates with customers before committing cash elsewhere." },
+    inventory: { title: "Set a reorder point for your most important stock", detail: "Record current quantities and a reorder threshold for key items. Kora can then flag stock that reaches the limit using the records you maintain." },
+    employees: { title: "Give each priority task a clear owner", detail: "Review open work and assign a responsible teammate and due date where appropriate, so handoffs and delays are easier to spot." },
+    payroll: { title: "Schedule a regular payroll-readiness check", detail: "Keep payroll dates and required approvals in your own records, and review them with the person responsible before each pay period." },
+  };
+  const strategy = records.profile?.mainChallenge ? strategies[records.profile.mainChallenge] : undefined;
 
   return {
     generatedAt: now.toISOString(),
     source: "workspace_records",
     items,
+    strategy: strategy ? { ...strategy, basedOn: "The main challenge selected in your business setup. This is a practical suggestion, not a forecast." } : undefined,
     emptyMessage: "No urgent actions found in the records currently tracked. Keep leads, quotations, expenses, inventory, and tasks up to date to improve this view.",
     weekly: {
       periodStart: weekStart.toISOString(),

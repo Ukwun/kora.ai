@@ -91,10 +91,19 @@ export type AIContext = {
     overdueInvoices: Array<{ id: string; number: string; dueAt?: string; amount: number; customerId?: string }>;
     overdueTasks: Array<{ id: string; title: string; dueAt?: string; assignedTo?: string }>;
     dueTodayTasks: Array<{ id: string; title: string; dueAt?: string; assignedTo?: string }>;
+    quotationFollowUp?: {
+      sampleSize: number;
+      notRecordedCount: number;
+      notRecorded: Array<{ id: string; number: string }>;
+    };
   };
 };
 
 export class AIEngine {
+  static get isConfigured(): boolean {
+    return Boolean(OPENAI_API_KEY);
+  }
+
   async generateRecommendations(context: AIContext): Promise<AIRecommendation[]> {
     const recommendations: AIRecommendation[] = [];
     const evidence = context.evidence;
@@ -110,6 +119,18 @@ export class AIEngine {
     }
     if (evidence && evidence.dueTodayTaskCount > 0) {
       add("due-today", "Check today?s due tasks", `${evidence.dueTodayTaskCount} open task${evidence.dueTodayTaskCount === 1 ? " is" : "s are"} due today.`, "Review today?s tasks with their assignees.", "operations", "Medium");
+    }
+    const quotationFollowUp = evidence?.quotationFollowUp;
+    if (quotationFollowUp && quotationFollowUp.sampleSize >= 5 && quotationFollowUp.notRecordedCount >= 3 && quotationFollowUp.notRecordedCount / quotationFollowUp.sampleSize >= 0.5) {
+      const percent = Math.round((quotationFollowUp.notRecordedCount / quotationFollowUp.sampleSize) * 100);
+      add(
+        "quotation-follow-up",
+        "Review quotation follow-ups",
+        `Kora has no follow-up activity recorded for ${quotationFollowUp.notRecordedCount} of ${quotationFollowUp.sampleSize} sent quotations older than seven days (${percent}%). This is a gap in recorded activity, not proof that no contact happened.`,
+        "Review the linked quotations. Record any follow-up already made, or decide whether a new follow-up is appropriate.",
+        "customer",
+        percent >= 75 ? "High" : "Medium",
+      );
     }
     return recommendations;
   }
@@ -186,6 +207,11 @@ export class AIEngine {
   }
 
   async chat(messages: AIMessage[], context: AIContext): Promise<string> {
+    const revenue = new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: context.organization.currency || "NGN",
+      maximumFractionDigits: 0,
+    }).format(context.metrics.revenue);
     const systemPrompt = `You are Kora, an intelligent business operating system AI assistant. You help businesses understand their operations and make better decisions.
 
 Current Business Context:
@@ -193,7 +219,7 @@ Current Business Context:
 - Industry: ${context.organization.industry}
 - Owner-provided profile context (estimates; use only when relevant and identify as owner-provided): ${context.businessProfile ? JSON.stringify(context.businessProfile) : "not recorded"}
 - User: ${context.user.name} (${context.user.role})
-- Revenue: ₦${context.metrics.revenue.toLocaleString()}
+- Revenue: ${revenue}
 - Customers: ${context.metrics.customers}
 - Active Tasks: ${context.metrics.tasks}
 - Retention Rate: ${context.metrics.retention === null ? "not enough verified history to calculate" : `${context.metrics.retention}%`}

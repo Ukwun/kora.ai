@@ -1,6 +1,5 @@
 import { readDatabase, writeDatabase, type ActivityEvent, type Customer, type Invoice, type Payment, type Task } from "./store";
-import { isFirebaseAdminConfigured } from "./firebase-admin";
-import { recordStructuredEntityMemory } from "./business-memory-records";
+import { deleteStructuredEntityMemory, recordStructuredEntityMemory } from "./business-memory-records";
 import { postgresEnabled, query } from "./db";
 
 function createId(prefix: string) {
@@ -27,10 +26,16 @@ export async function listOrganizationRecords<T extends { organizationId: string
 
 export async function listOrganizationActivity(organizationId: string): Promise<ActivityEvent[]> {
   if (postgresEnabled) {
-    const result = await query<ActivityEvent>(`SELECT id, organization_id AS "organizationId", actor_user_id AS "actorUserId", type, entity_type AS "entityType", entity_id AS "entityId", payload, created_at AS "createdAt" FROM activity_events WHERE organization_id = $1 ORDER BY created_at DESC LIMIT 500`, [organizationId]);
+    const result = await query<ActivityEvent>(`SELECT activity_events.id, activity_events.organization_id AS "organizationId", activity_events.actor_user_id AS "actorUserId", users.name AS "actorName", activity_events.type, activity_events.entity_type AS "entityType", activity_events.entity_id AS "entityId", activity_events.payload, activity_events.created_at AS "createdAt" FROM activity_events LEFT JOIN users ON users.id = activity_events.actor_user_id WHERE activity_events.organization_id = $1 ORDER BY activity_events.created_at DESC LIMIT 500`, [organizationId]);
     return result.rows;
   }
-  return (await readDatabase()).activityEvents.filter((event) => event.organizationId === organizationId);
+  const database = await readDatabase();
+  return database.activityEvents
+    .filter((event) => event.organizationId === organizationId)
+    .map((event) => ({
+      ...event,
+      actorName: database.users.find((user) => user.id === event.actorUserId)?.name,
+    }));
 }
 
 export async function createCustomer(data: Omit<Customer, "id" | "createdAt" | "updatedAt">) {
@@ -113,22 +118,18 @@ export async function deleteOrganizationRecord(
 }
 
 async function mirrorMemory(organizationId: string, createdBy: string, entityType: "customer" | "task" | "invoice" | "payment", entityId: string, title: string, data: Record<string, unknown>) {
-  if (!isFirebaseAdminConfigured()) return;
   try {
     await recordStructuredEntityMemory({ organizationId, createdBy, entityType, entityId, title, summary: `${title} · ${entityType} record`, data });
   } catch (error) {
-    console.error("Unable to mirror the saved record into Firebase business memory.", error);
+    console.error("Unable to mirror the saved record into business memory.", error);
   }
 }
 
 async function deleteMemoryMirror(organizationId: string, entityType: "customer" | "task" | "invoice" | "payment", entityId: string) {
-  if (!isFirebaseAdminConfigured()) return;
   try {
-    const { deleteBusinessMemoryRecord } = await import("./business-memory-records");
-    const recordId = `${entityType}_${entityId}`;
-    await deleteBusinessMemoryRecord(organizationId, recordId, "system");
+    await deleteStructuredEntityMemory(organizationId, entityType, entityId, "system");
   } catch (error) {
-    console.error("Unable to remove the deleted record from Firebase business memory.", error);
+    console.error("Unable to remove the deleted record from business memory.", error);
   }
 }
 

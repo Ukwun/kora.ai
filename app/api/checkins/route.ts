@@ -3,7 +3,6 @@ import { z } from "zod";
 import { addMemoryNode } from "@/lib/business-memory";
 import { getSessionFromRequest } from "@/lib/session";
 import { logAudit } from "@/lib/security";
-import { isFirebaseAdminConfigured } from "@/lib/firebase-admin";
 import { createBusinessMemoryRecord, type MemoryEntityType } from "@/lib/business-memory-records";
 
 const checkinSchema = z.object({
@@ -38,26 +37,25 @@ export async function POST(request: NextRequest) {
     nothing_significant: "note",
     other: "note",
   };
-  const node = isFirebaseAdminConfigured()
-    ? await createBusinessMemoryRecord({
-        organizationId: session.organizationId,
-        createdBy: session.id,
-        entityType: entityTypeByCheckin[type],
-        title: labels[type],
-        summary: content,
-        data: { checkinType: type },
-        status: "active",
-        source: "user_confirmed",
-        verificationStatus: "user_confirmed",
-        tags: ["daily_checkin"],
-      })
-    : await addMemoryNode(session.organizationId, session.id, {
-        category: "observation",
-        title: labels[type],
-        content,
-        confidence: 75,
-        source: "manual",
-      });
-  await logAudit({ userId: session.id, organizationId: session.organizationId, action: "data.create", resource: "daily_checkin", resourceId: node.id, status: "success", details: { type } });
-  return NextResponse.json({ success: true, data: node }, { status: 201 });
+  const node = await addMemoryNode(session.organizationId, session.id, {
+    category: "observation",
+    title: labels[type],
+    content,
+    confidence: 75,
+    source: "manual",
+  });
+  const record = await createBusinessMemoryRecord({
+    organizationId: session.organizationId,
+    createdBy: session.id,
+    entityType: entityTypeByCheckin[type],
+    title: labels[type],
+    summary: content,
+    data: { checkinType: type },
+    status: "active",
+    source: "user_confirmed",
+    verificationStatus: "user_confirmed",
+    tags: ["daily_checkin"],
+  });
+  await logAudit({ userId: session.id, organizationId: session.organizationId, action: "data.create", resource: "daily_checkin", resourceId: record.id, status: "success", details: { type, profileMemoryNodeId: node.id } });
+  return NextResponse.json({ success: true, data: record }, { status: 201 });
 }

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { readDatabase } from "@/lib/store";
 import { listOrganizationRecords } from "@/lib/operations";
 import { listBusinessMemoryRecords, createBusinessMemoryRecord } from "@/lib/business-memory-records";
-import { isFirebaseAdminConfigured } from "@/lib/firebase-admin";
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from "@/lib/email-provider";
 import { logAudit } from "@/lib/security";
 import type { Customer, Invoice, Task } from "@/lib/store";
@@ -10,7 +9,7 @@ import type { Customer, Invoice, Task } from "@/lib/store";
 export async function POST(request: NextRequest) {
   const secret = process.env.WEEKLY_REPORT_SECRET;
   if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!isTransactionalEmailConfigured() || !isFirebaseAdminConfigured()) return NextResponse.json({ error: "Weekly delivery requires email and Firebase configuration." }, { status: 503 });
+  if (!isTransactionalEmailConfigured()) return NextResponse.json({ error: "Weekly delivery requires transactional email configuration." }, { status: 503 });
   const database = await readDatabase();
   let sent = 0;
   for (const organization of database.organizations) {

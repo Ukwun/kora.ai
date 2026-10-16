@@ -3,8 +3,8 @@ import { getSessionFromRequest } from "@/lib/session";
 import { readDatabase } from "@/lib/store";
 import { buildDailyBriefing } from "@/lib/daily-briefing";
 import { canPerformAction } from "@/lib/security";
-import { isFirebaseAdminConfigured } from "@/lib/firebase-admin";
 import { listBusinessMemoryRecords } from "@/lib/business-memory-records";
+import { getBusinessProfile } from "@/lib/business-memory";
 
 export async function GET(request: NextRequest) {
   const session = await getSessionFromRequest(request);
@@ -17,13 +17,15 @@ export async function GET(request: NextRequest) {
   const visibleInvoices = database.invoices.filter((invoice) => invoice.organizationId === organizationId && (teamAccess || invoice.createdBy === session.id));
   const visibleTasks = database.tasks.filter((task) => task.organizationId === organizationId &&
     (teamAccess || task.createdBy === session.id || task.assignedTo === session.id));
-  const memory = isFirebaseAdminConfigured() ? await listBusinessMemoryRecords(organizationId, 500) : [];
+  const memory = await listBusinessMemoryRecords(organizationId, 500);
   const visibleMemory = memory.filter((record) => teamAccess || record.createdBy === session.id);
+  const profile = await getBusinessProfile(session.id, organizationId);
   const briefing = buildDailyBriefing({
     customers: visibleCustomers,
     invoices: visibleInvoices,
     tasks: visibleTasks,
     memory: visibleMemory,
+    profile: { mainChallenge: profile?.mainChallenge },
   });
 
   return NextResponse.json({ success: true, data: briefing }, { headers: { "Cache-Control": "private, no-store, max-age=0" } });

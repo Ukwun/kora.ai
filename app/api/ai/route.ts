@@ -4,8 +4,7 @@ import { findUserByEmail, findOrganizationById } from "@/lib/store";
 import { AIEngine, type AIMessage } from "@/lib/ai";
 import { answerBusinessQuestion } from "@/lib/ai-intelligence";
 import { buildAuthorizedAIContext } from "@/lib/ai-context";
-import { isFirebaseAdminConfigured } from "@/lib/firebase-admin";
-import { createBusinessMemoryRecord } from "@/lib/business-memory-records";
+import { createBusinessMemoryRecord, listBusinessMemoryRecords } from "@/lib/business-memory-records";
 import {
   checkRateLimit,
   getClientIP,
@@ -104,25 +103,39 @@ export async function POST(request: NextRequest) {
       case "recommendations":
         {
           const recommendations = await aiEngine.generateRecommendations(fullContext);
-          if (!isFirebaseAdminConfigured()) {
-            result = recommendations.map((recommendation) => ({ ...recommendation, requiresApproval: true, persistence: "not_configured" }));
-            break;
-          }
-          result = await Promise.all(recommendations.map(async (recommendation) => {
+          const existingRecommendations = await listBusinessMemoryRecords(session.organizationId, 500);
+          result = (await Promise.all(recommendations.map(async (recommendation) => {
+            const evidence = fullContext.evidence;
+            const recommendationKey = JSON.stringify({
+              title: recommendation.title,
+              overdueInvoices: evidence?.overdueInvoices.map(({ id }) => id) ?? [],
+              overdueTasks: evidence?.overdueTasks.map(({ id }) => id) ?? [],
+              dueTodayTasks: evidence?.dueTodayTasks.map(({ id }) => id) ?? [],
+              untrackedQuotations: evidence?.quotationFollowUp?.notRecorded.map(({ id }) => id) ?? [],
+            });
+            const existing = existingRecommendations.find((record) =>
+              record.entityType === "ai_recommendation" &&
+              record.data.recommendationKey === recommendationKey
+            );
+            if (existing) {
+              return existing.status === "pending_approval"
+                ? { ...recommendation, id: existing.id, requiresApproval: true, persistence: "stored" }
+                : null;
+            }
             const record = await createBusinessMemoryRecord({
               organizationId: session.organizationId,
               createdBy: user.id,
               entityType: "ai_recommendation",
               title: recommendation.title,
               summary: recommendation.summary,
-              data: { action: recommendation.action, category: recommendation.category, intensity: recommendation.intensity, evidence: fullContext.evidence },
+              data: { action: recommendation.action, category: recommendation.category, intensity: recommendation.intensity, recommendationKey, evidence: fullContext.evidence },
               status: "pending_approval",
               source: "system_calculation",
               verificationStatus: "unverified",
               tags: ["ai_recommendation", recommendation.category],
             });
             return { ...recommendation, id: record.id, requiresApproval: true, persistence: "stored" };
-          }));
+          }))).filter((recommendation) => recommendation !== null);
         }
         break;
 
@@ -147,6 +160,21 @@ export async function POST(request: NextRequest) {
         if (intelligence.intent === "unsupported" || (intelligence.intent === "business_memory" && !intelligence.memoryRecords?.length) || (intelligence.intent === "repurchase_candidates" && !intelligence.candidates.length)) {
           result = { ...intelligence, message: intelligence.dataNotice ?? "I do not have enough authorized records to answer that reliably." };
           break;
+        }
+        if (!AIEngine.isConfigured) {
+          await logAudit({
+            userId: session.id,
+            organizationId: session.organizationId,
+            action: "error",
+            resource: "ai",
+            status: "failure",
+            details: { reason: "AI provider is not configured" },
+            ipAddress: getClientIP(request),
+          });
+          return NextResponse.json(
+            { error: "Kora's AI answer service is not configured in this environment. Please contact your administrator." },
+            { status: 503 }
+          );
         }
         const evidence = JSON.stringify({
           generatedAt: intelligence.generatedAt,

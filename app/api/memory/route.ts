@@ -3,7 +3,6 @@ import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/session";
 import { findUserByEmail } from "@/lib/store";
 import { canPerformAction } from "@/lib/security";
-import { isFirebaseAdminConfigured } from "@/lib/firebase-admin";
 import { createBusinessMemoryRecord, decideBusinessRecommendation, deleteBusinessMemoryRecord, getBusinessMemoryRecord, listBusinessMemoryAuditHistory, listBusinessMemoryRecords, MEMORY_ENTITY_TYPES, updateBusinessMemoryRecord, type BusinessMemoryRecord } from "@/lib/business-memory-records";
 import { listOrganizationRecords } from "@/lib/operations";
 import type { Customer, Invoice, Payment, Task } from "@/lib/store";
@@ -41,7 +40,7 @@ export async function GET(request: NextRequest) {
   if ("response" in auth) return auth.response;
   const recordId = request.nextUrl.searchParams.get("id");
   if (recordId) {
-    const record = isFirebaseAdminConfigured() ? await getBusinessMemoryRecord(auth.session.organizationId, recordId) : null;
+    const record = await getBusinessMemoryRecord(auth.session.organizationId, recordId);
     const canSeeTeam = canPerformAction(auth.session, "view_team_data") || canPerformAction(auth.session, "all_data_access");
     if (record) {
       if (!canSeeTeam && record.createdBy !== auth.user.id) return NextResponse.json({ error: "Access denied." }, { status: 403 });
@@ -60,7 +59,6 @@ export async function GET(request: NextRequest) {
     if (!canSeeTeam && item.createdBy !== auth.user.id) return NextResponse.json({ error: "Access denied." }, { status: 403 });
     return NextResponse.json({ success: true, data: { ...item, organizationId: auth.session.organizationId, summary: `${item.entityType} record ${item.title}`, source: "structured_application", verificationStatus: "verified" }, auditHistory: [] });
   }
-  if (!isFirebaseAdminConfigured()) return NextResponse.json({ error: "Business memory storage is not configured for this deployment." }, { status: 503 });
   const records = await listBusinessMemoryRecords(auth.session.organizationId, 100);
   const visible = canPerformAction(auth.session, "view_team_data") || canPerformAction(auth.session, "all_data_access")
     ? records
@@ -74,7 +72,6 @@ export async function POST(request: NextRequest) {
   if (!canPerformAction(auth.session, "view_team_data") && !canPerformAction(auth.session, "all_data_access")) {
     return NextResponse.json({ error: "Only workspace managers can add shared business memory." }, { status: 403 });
   }
-  if (!isFirebaseAdminConfigured()) return NextResponse.json({ error: "Business memory storage is not configured for this deployment." }, { status: 503 });
   const parsed = createSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Confirm a valid business memory entry before saving it." }, { status: 400 });
 
@@ -93,7 +90,6 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   const auth = await getAuthorizedUser(request);
   if ("response" in auth) return auth.response;
-  if (!isFirebaseAdminConfigured()) return NextResponse.json({ error: "Business memory storage is not configured for this deployment." }, { status: 503 });
   const recordId = request.nextUrl.searchParams.get("id");
   if (!recordId) return NextResponse.json({ error: "A memory record ID is required." }, { status: 400 });
   const parsed = updateSchema.safeParse(await request.json().catch(() => null));
@@ -121,7 +117,6 @@ export async function PATCH(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const auth = await getAuthorizedUser(request);
   if ("response" in auth) return auth.response;
-  if (!isFirebaseAdminConfigured()) return NextResponse.json({ error: "Business memory storage is not configured for this deployment." }, { status: 503 });
   const recordId = request.nextUrl.searchParams.get("id");
   if (!recordId) return NextResponse.json({ error: "A memory record ID is required." }, { status: 400 });
   const current = await getBusinessMemoryRecord(auth.session.organizationId, recordId);

@@ -226,7 +226,6 @@ function EmployeesStep({
   loading: boolean;
 }) {
   const [value, setValue] = useState("");
-  const [customers, setCustomers] = useState("");
   const [monthlyRevenueRange, setMonthlyRevenueRange] = useState("unknown");
 
   return (
@@ -238,10 +237,9 @@ function EmployeesStep({
         placeholder="Enter number of employees"
         className="w-full px-4 py-3 bg-slate-950 border border-white/10 rounded-xl text-white placeholder:text-slate-400 focus:border-violet-500 focus:outline-none"
       />
-      <input type="number" min="0" value={customers} onChange={(e) => setCustomers(e.target.value)} placeholder="Approximate customers per month" className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-white placeholder:text-slate-400 focus:border-violet-500 focus:outline-none" />
       <select value={monthlyRevenueRange} onChange={(event) => setMonthlyRevenueRange(event.target.value)} className="w-full rounded-xl border border-white/10 bg-[#11111c] px-4 py-3 text-white"><option value="unknown">Monthly revenue range (prefer not to say)</option><option value="under_500k">Under 500,000 in selected currency</option><option value="500k_2m">500,000–2,000,000</option><option value="2m_10m">2,000,000–10,000,000</option><option value="over_10m">Over 10,000,000</option></select>
       <button
-        onClick={() => { onNext({ employees: value, customers: customers || "0", monthlyRevenueRange }); }}
+        onClick={() => { onNext({ employees: value, monthlyRevenueRange }); }}
         disabled={!value || loading}
         className="w-full px-6 py-3 bg-violet-500 text-white rounded-xl font-semibold hover:bg-violet-400 disabled:opacity-50 transition-all"
       >

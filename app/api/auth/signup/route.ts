@@ -14,7 +14,7 @@ const signupSchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
+    const body = await request.json().catch(() => null);
     const parsed = signupSchema.safeParse(body);
 
     if (!parsed.success) {
@@ -62,7 +62,8 @@ export async function POST(request: Request) {
       await sendTransactionalEmail({ to: user.email, subject: "Verify your Kora account", text: `Verify your email address within 24 hours: ${verificationUrl}`, html: `<p>Verify your Kora account within 24 hours.</p><p><a href="${verificationUrl}">Verify email address</a></p>` });
     }
     return NextResponse.json({ success: true, needsVerification: true, message: "Account created. Verify your email before signing in.", ...(process.env.NODE_ENV !== "production" && !isTransactionalEmailConfigured() ? { developmentVerificationUrl: `/auth/verify?token=${encodeURIComponent(verificationToken)}` } : {}) }, { status: 201 });
-  } catch {
+  } catch (error) {
+    console.error("Sign-up failed.", error);
     return NextResponse.json({ error: "Unable to create account." }, { status: 500 });
   }
 }

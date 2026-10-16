@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/session";
 import { createInvoice, listOrganizationRecords } from "@/lib/operations";
 import type { Invoice } from "@/lib/store";
+import { findOrganizationById } from "@/lib/store";
 import { canPerformAction } from "@/lib/security";
 import { recordUserAction } from "@/lib/business-memory";
 
@@ -23,7 +24,9 @@ export async function POST(request: NextRequest) {
   if (!canPerformAction(session, "all_data_access")) return NextResponse.json({ error: "Only owners and admins can create invoices" }, { status: 403 });
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Enter a valid invoice number and amount." }, { status: 400 });
-  const invoice = await createInvoice({ ...parsed.data, currency: "NGN", status: "draft", organizationId: session.organizationId, createdBy: session.id });
+  const organization = await findOrganizationById(session.organizationId);
+  if (!organization) return NextResponse.json({ error: "Active workspace could not be found." }, { status: 404 });
+  const invoice = await createInvoice({ ...parsed.data, currency: organization.currency, status: "draft", organizationId: session.organizationId, createdBy: session.id });
   await recordUserAction(session.organizationId, session.id, "invoice_created", { invoiceId: invoice.id, amount: invoice.amount });
   return NextResponse.json({ success: true, data: invoice }, { status: 201 });
 }

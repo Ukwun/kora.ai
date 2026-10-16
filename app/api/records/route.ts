@@ -3,7 +3,6 @@ import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/session";
 import { findUserByEmail } from "@/lib/store";
 import { canPerformAction } from "@/lib/security";
-import { isFirebaseAdminConfigured } from "@/lib/firebase-admin";
 import { createBusinessMemoryRecord, listBusinessMemoryRecords, updateBusinessMemoryRecord, deleteBusinessMemoryRecord, getBusinessMemoryRecord, listBusinessMemoryAuditHistory } from "@/lib/business-memory-records";
 
 const recordTypes = ["lead", "expense", "project", "product", "service", "inventory", "quotation", "appointment", "meeting", "document"] as const;
@@ -26,7 +25,6 @@ async function authorized(request: NextRequest) {
   if (!session) return { response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
   const user = await findUserByEmail(session.email);
   if (!user || user.id !== session.id) return { response: NextResponse.json({ error: "Active workspace membership could not be verified." }, { status: 403 }) };
-  if (!isFirebaseAdminConfigured()) return { response: NextResponse.json({ error: "Operational record storage is not configured." }, { status: 503 }) };
   return { user, session };
 }
 
