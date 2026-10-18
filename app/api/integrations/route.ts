@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOrCreateBusinessProfile, recordIntegrationInterest } from "@/lib/business-memory";
 import { getSessionFromRequest } from "@/lib/session";
 import { canPerformAction } from "@/lib/security";
+import { getWhatsAppCapability, isWhatsAppConfigured } from "@/lib/whatsapp";
 import { z } from "zod";
 
 const requestSchema = z.object({
@@ -20,8 +21,10 @@ export async function GET(request: NextRequest) {
       whatsapp: {
         connected: whatsapp?.connected === true,
         requestedAt: typeof whatsapp?.metadata?.requestedAt === "string" ? whatsapp.metadata.requestedAt : null,
-        capability: "not_configured",
-        message: "WhatsApp Business authorization is not configured in this deployment. No conversations are read and no messages are sent.",
+        capability: getWhatsAppCapability(),
+        message: isWhatsAppConfigured()
+          ? "WhatsApp Cloud API credentials are available. Workspace authorization, customer opt-in and approved message workflows are still required before any outreach is enabled."
+          : "WhatsApp Business authorization is not configured in this deployment. No conversations are read and no messages are sent.",
       },
     },
   }, { headers: { "Cache-Control": "private, no-store, max-age=0" } });
