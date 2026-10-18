@@ -99,6 +99,18 @@ export function GrowthAndConnections({ canManage }: { canManage: boolean }) {
     }
   }
 
+  async function requestSubscription(plan: "pilot" | "steady" | "scale") {
+    if (!canManage) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const response = await fetch("/api/lead-service/subscription", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ plan, acceptsTerms: true }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "The subscription request could not be saved.");
+      setNotice(result.message ?? "Subscription request saved.");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "The subscription request could not be saved."); }
+    finally { setBusy(false); }
+  }
+
   return <section className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.025]">
     <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 px-5 py-5 sm:px-6">
       <div><p className="text-xs uppercase tracking-[0.18em] text-violet-300">Growth and connections</p><h2 className="mt-2 text-xl font-semibold">Bring the next opportunity into view</h2><p className="mt-1 text-sm text-slate-400">Request a targeted lead-service review or check your business messaging connection.</p></div>
@@ -127,6 +139,7 @@ export function GrowthAndConnections({ canManage }: { canManage: boolean }) {
           <label className="flex items-start gap-3 text-xs leading-5 text-slate-400"><input name="acceptsReviewTerms" type="checkbox" required className="mt-1 accent-violet-400" /><span>I understand this only requests a review. Kora does not currently source or deliver leads through this form, and there is no charge or active subscription. Any future offer must explain its source, price, terms and opt-out process before I agree.</span></label>
           <button type="submit" disabled={!canManage || busy} className={buttonClass}>{busy ? "Saving request…" : canManage ? "Request availability review" : "Ask a workspace owner to request a review"}</button>
           <p className="text-xs leading-5 text-slate-500">We do not support targeting based on sensitive personal traits such as health, religion, race or political views. Only adult professional audiences are eligible for review.</p>
+          <div className="grid gap-2 sm:grid-cols-3"><button type="button" disabled={!canManage || busy} onClick={() => void requestSubscription("pilot")} className={buttonClass}>Request Pilot subscription</button><button type="button" disabled={!canManage || busy} onClick={() => void requestSubscription("steady")} className={buttonClass}>Request Steady subscription</button><button type="button" disabled={!canManage || busy} onClick={() => void requestSubscription("scale")} className={buttonClass}>Request Scale subscription</button></div>
         </form>
         <aside className="rounded-xl border border-white/10 bg-black/20 p-4 sm:p-5">
           <h3 className="font-medium">Your review requests</h3>

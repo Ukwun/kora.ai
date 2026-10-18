@@ -90,6 +90,20 @@ export type BusinessProfile = {
   preferredPaymentMethods?: string[];
   workingHours?: string;
   reportingPreferences?: string[];
+  notificationPreferences?: {
+    emailEnabled: boolean;
+    browserEnabled: boolean;
+    digest: "daily" | "weekly" | "never";
+    events: {
+      customerCreated: boolean;
+      overdueInvoice: boolean;
+      taskAssigned: boolean;
+      paymentFailed: boolean;
+      aiRecommendation: boolean;
+      integrationEvent: boolean;
+      leadUpdate: boolean;
+    };
+  };
   profileSource?: "onboarding" | "user_updated" | "verified_record";
   profileUpdatedAt?: string;
   type: BusinessType;

@@ -6,6 +6,7 @@ import type { Invoice } from "@/lib/store";
 import { findOrganizationById } from "@/lib/store";
 import { canPerformAction } from "@/lib/security";
 import { recordUserAction } from "@/lib/business-memory";
+import { notifyOrganization } from "@/lib/notifications";
 
 const schema = z.object({ number: z.string().trim().min(2).max(40), amount: z.coerce.number().positive(), customerId: z.string().optional(), dueAt: z.string().datetime().optional() });
 
@@ -28,5 +29,6 @@ export async function POST(request: NextRequest) {
   if (!organization) return NextResponse.json({ error: "Active workspace could not be found." }, { status: 404 });
   const invoice = await createInvoice({ ...parsed.data, currency: organization.currency, status: "draft", organizationId: session.organizationId, createdBy: session.id });
   await recordUserAction(session.organizationId, session.id, "invoice_created", { invoiceId: invoice.id, amount: invoice.amount });
+  await notifyOrganization({ organizationId: session.organizationId, actorUserId: session.id, event: "integrationEvent", title: "Invoice created", body: `Invoice ${invoice.number} was created for ${organization.currency} ${invoice.amount}.`, data: { invoiceId: invoice.id } });
   return NextResponse.json({ success: true, data: invoice }, { status: 201 });
 }

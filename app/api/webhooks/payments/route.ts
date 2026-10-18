@@ -1,6 +1,8 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createPayment } from "@/lib/operations";
+import { createBusinessMemoryRecord, listBusinessMemoryRecords } from "@/lib/business-memory-records";
+import { notifyOrganization } from "@/lib/notifications";
 
 function validSignature(rawBody: string, signature: string | null) {
   const secret = process.env.PAYMENT_WEBHOOK_SECRET;
@@ -15,11 +17,16 @@ export async function POST(request: NextRequest) {
   const rawBody = await request.text();
   const signature = request.headers.get("x-webhook-signature") ?? request.headers.get("verif-hash");
   if (!validSignature(rawBody, signature)) return NextResponse.json({ error: "Invalid webhook signature" }, { status: 401 });
-  const payload = JSON.parse(rawBody) as { data?: { amount?: number; currency?: string; id?: string; customer?: { id?: string }; invoiceId?: string }; provider?: string };
+  let payload: { data?: { amount?: number; currency?: string; id?: string; customer?: { id?: string }; invoiceId?: string; metadata?: { organizationId?: string } }; provider?: string };
+  try { payload = JSON.parse(rawBody) as typeof payload; } catch { return NextResponse.json({ error: "Invalid webhook JSON" }, { status: 400 }); }
   const data = payload.data;
-  if (!data?.amount || !data.id) return NextResponse.json({ error: "Invalid payment payload" }, { status: 400 });
-  const organizationId = request.headers.get("x-kora-organization-id");
+  if (!data?.amount || !Number.isFinite(Number(data.amount)) || Number(data.amount) <= 0 || !data.id) return NextResponse.json({ error: "Invalid payment payload" }, { status: 400 });
+  const organizationId = data.metadata?.organizationId;
   if (!organizationId) return NextResponse.json({ error: "Missing organization mapping" }, { status: 400 });
+  const existing = await listBusinessMemoryRecords(organizationId, 500);
+  if (existing.some((record) => record.entityType === "webhook_event" && record.data.providerReference === data.id)) return NextResponse.json({ received: true, duplicate: true });
   await createPayment({ organizationId, amount: data.amount, currency: data.currency ?? "NGN", provider: payload.provider ?? "payment_provider", providerReference: data.id, invoiceId: data.invoiceId, customerId: data.customer?.id, status: "received", receivedAt: new Date().toISOString() });
+  await createBusinessMemoryRecord({ organizationId, createdBy: "system", entityType: "webhook_event", title: `Payment webhook ${data.id}`, summary: "A payment provider webhook was processed.", data: { providerReference: data.id, provider: payload.provider ?? "payment_provider" }, status: "processed", source: "integration", verificationStatus: "verified", tags: ["webhook", "payment"] });
+  await notifyOrganization({ organizationId, event: "integrationEvent", title: "Payment received", body: `A payment of ${data.currency ?? "NGN"} ${data.amount} was received.`, data: { providerReference: data.id } });
   return NextResponse.json({ received: true });
 }

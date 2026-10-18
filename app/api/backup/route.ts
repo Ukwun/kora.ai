@@ -1,86 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import fs from "fs/promises";
-import path from "path";
+import { postgresEnabled } from "@/lib/db";
+import { getSessionFromRequest } from "@/lib/session";
+import { canPerformAction } from "@/lib/security";
 
 export async function POST(request: NextRequest) {
-  try {
-    const dbPath = path.join(process.cwd(), "data", "app-db.json");
-    
-    // Read current database
-    const dbContent = await fs.readFile(dbPath, "utf-8");
-    
-    // Create backup with timestamp
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const backupDir = path.join(process.cwd(), "data", "backups");
-    
-    // Ensure backups directory exists
-    await fs.mkdir(backupDir, { recursive: true });
-    
-    const backupPath = path.join(backupDir, `app-db.backup.${timestamp}.json`);
-    
-    // Write backup
-    await fs.writeFile(backupPath, dbContent, "utf-8");
-    
-    // Keep only last 10 backups
-    const files = await fs.readdir(backupDir);
-    const backupFiles = files
-      .filter((f) => f.startsWith("app-db.backup."))
-      .sort()
-      .reverse();
-    
-    if (backupFiles.length > 10) {
-      for (let i = 10; i < backupFiles.length; i++) {
-        await fs.unlink(path.join(backupDir, backupFiles[i]));
-      }
-    }
-    
-    return NextResponse.json({
-      success: true,
-      backupPath,
-      timestamp,
-      message: "Database backed up successfully",
-      totalBackups: Math.min(backupFiles.length + 1, 10),
-    });
-  } catch (error) {
-    console.error("Backup error:", error);
-    return NextResponse.json(
-      { error: "Failed to create backup" },
-      { status: 500 }
-    );
-  }
+  const session = await getSessionFromRequest(request);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!canPerformAction(session, "manage_billing")) return NextResponse.json({ error: "Only the workspace owner can manage backups." }, { status: 403 });
+  if (postgresEnabled) return NextResponse.json({ success: true, provider: "managed_postgresql", message: "Backups are managed by the configured PostgreSQL provider. Configure point-in-time recovery and retention there." });
+  return NextResponse.json({ success: false, provider: "development-file-store", message: "Development storage is not suitable for production backups." }, { status: 503 });
 }
 
 // Get backup status
-export async function GET() {
-  try {
-    const backupDir = path.join(process.cwd(), "data", "backups");
-    
-    try {
-      const files = await fs.readdir(backupDir);
-      const backupFiles = files
-        .filter((f) => f.startsWith("app-db.backup."))
-        .sort()
-        .reverse();
-      
-      return NextResponse.json({
-        success: true,
-        totalBackups: backupFiles.length,
-        lastBackup: backupFiles[0] || null,
-        backups: backupFiles.slice(0, 5),
-      });
-    } catch {
-      return NextResponse.json({
-        success: true,
-        totalBackups: 0,
-        lastBackup: null,
-        backups: [],
-      });
-    }
-  } catch (error) {
-    console.error("Backup status error:", error);
-    return NextResponse.json(
-      { error: "Failed to get backup status" },
-      { status: 500 }
-    );
-  }
+export async function GET(request: NextRequest) {
+  const session = await getSessionFromRequest(request);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!canPerformAction(session, "manage_billing")) return NextResponse.json({ error: "Only the workspace owner can view backup status." }, { status: 403 });
+  return NextResponse.json({ success: true, provider: postgresEnabled ? "managed_postgresql" : "development-file-store", productionReady: postgresEnabled, message: postgresEnabled ? "Configure retention and point-in-time recovery in your database provider." : "Use managed PostgreSQL before production." });
 }

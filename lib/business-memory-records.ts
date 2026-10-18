@@ -15,7 +15,7 @@ export const MEMORY_ENTITY_TYPES = [
   "organization_profile", "customer", "lead", "contact", "employee", "team", "product", "service",
   "invoice", "quotation", "payment", "expense", "subscription", "task", "project", "appointment",
   "message", "document", "meeting", "note", "goal", "report", "user_preference", "ai_recommendation",
-  "approved_action", "rejected_action", "integration_event", "lead_request",
+  "approved_action", "rejected_action", "integration_event", "lead_request", "notification", "lead_subscription", "lead_delivery", "webhook_event",
 ] as const;
 
 export type MemoryEntityType = (typeof MEMORY_ENTITY_TYPES)[number];

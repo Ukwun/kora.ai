@@ -4,6 +4,7 @@ import { getSessionFromRequest } from "@/lib/session";
 import { createTask, listOrganizationRecords } from "@/lib/operations";
 import type { Task } from "@/lib/store";
 import { canPerformAction } from "@/lib/security";
+import { notifyOrganization } from "@/lib/notifications";
 
 const schema = z.object({ title: z.string().trim().min(2).max(160), description: z.string().trim().max(1000).optional(), priority: z.enum(["low", "medium", "high"]).default("medium"), assignedTo: z.string().optional(), dueAt: z.string().datetime().optional() });
 
@@ -23,5 +24,6 @@ export async function POST(request: NextRequest) {
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Enter a valid task title." }, { status: 400 });
   const task = await createTask({ ...parsed.data, status: "todo", organizationId: session.organizationId, createdBy: session.id });
+  await notifyOrganization({ organizationId: session.organizationId, actorUserId: session.id, userIds: task.assignedTo ? [task.assignedTo] : undefined, event: "taskAssigned", title: task.assignedTo ? "Task assigned to you" : "New task created", body: task.assignedTo ? `You have been assigned: ${task.title}` : `A new task was created: ${task.title}`, data: { taskId: task.id } });
   return NextResponse.json({ success: true, data: task }, { status: 201 });
 }

@@ -5,6 +5,7 @@ import { createCustomer, listOrganizationRecords } from "@/lib/operations";
 import type { Customer } from "@/lib/store";
 import { canPerformAction } from "@/lib/security";
 import { recordUserAction } from "@/lib/business-memory";
+import { notifyOrganization } from "@/lib/notifications";
 
 const schema = z.object({ name: z.string().trim().min(2).max(120), email: z.string().email().optional().or(z.literal("")), phone: z.string().trim().max(40).optional(), notes: z.string().trim().max(1000).optional() });
 
@@ -25,5 +26,6 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: "Enter a valid customer name and email." }, { status: 400 });
   const customer = await createCustomer({ ...parsed.data, email: parsed.data.email || undefined, status: "active", organizationId: session.organizationId, createdBy: session.id });
   await recordUserAction(session.organizationId, session.id, "customer_added", { customerId: customer.id });
+  await notifyOrganization({ organizationId: session.organizationId, actorUserId: session.id, event: "customerCreated", title: "New customer added", body: `${customer.name} was added to your workspace.`, data: { customerId: customer.id } });
   return NextResponse.json({ success: true, data: customer }, { status: 201 });
 }

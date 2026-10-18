@@ -471,6 +471,31 @@ export async function createOrganization(data: {
   return organization;
 }
 
+export async function deleteOrganization(organizationId: string) {
+  if (postgresEnabled) {
+    const result = await query("DELETE FROM organizations WHERE id = $1", [organizationId]);
+    return Boolean(result.rowCount);
+  }
+  const database = await readDatabase();
+  const exists = database.organizations.some((organization) => organization.id === organizationId);
+  if (!exists) return false;
+  database.organizations = database.organizations.filter((organization) => organization.id !== organizationId);
+  database.users = database.users.filter((user) => user.organizationId !== organizationId);
+  database.onboarding = database.onboarding.filter((entry) => database.users.some((user) => user.id === entry.userId));
+  database.profiles = database.profiles.filter((profile) => profile.organizationId !== organizationId);
+  database.customers = database.customers.filter((entry) => entry.organizationId !== organizationId);
+  database.tasks = database.tasks.filter((entry) => entry.organizationId !== organizationId);
+  database.invoices = database.invoices.filter((entry) => entry.organizationId !== organizationId);
+  database.payments = database.payments.filter((entry) => entry.organizationId !== organizationId);
+  database.activityEvents = database.activityEvents.filter((entry) => entry.organizationId !== organizationId);
+  database.memberships = database.memberships.filter((entry) => entry.organizationId !== organizationId);
+  database.billingSubscriptions = database.billingSubscriptions.filter((entry) => entry.organizationId !== organizationId);
+  database.businessMemoryRecords = database.businessMemoryRecords.filter((entry) => entry.organizationId !== organizationId);
+  database.businessMemoryAuditEvents = database.businessMemoryAuditEvents.filter((entry) => entry.organizationId !== organizationId);
+  await writeDatabase(database);
+  return true;
+}
+
 export async function updateOrganizationProfile(organizationId: string, changes: Pick<Organization, "name" | "industry" | "currency" | "timezone">) {
   const database = await readDatabase();
   const organization = database.organizations.find((entry) => entry.id === organizationId);

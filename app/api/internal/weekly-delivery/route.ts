@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
   const database = await readDatabase();
   let sent = 0;
   for (const organization of database.organizations) {
-    const recipientIds = database.profiles.filter((profile) => profile.organizationId === organization.id && profile.reportingPreferences?.includes("weekly_summary")).map((profile) => profile.userId);
+    const recipientIds = database.profiles.filter((profile) => profile.organizationId === organization.id && (profile.reportingPreferences?.includes("weekly_summary") || profile.notificationPreferences?.digest === "weekly")).map((profile) => profile.userId);
     const recipients = database.users.filter((user) => recipientIds.includes(user.id) && user.accountStatus === "active");
     if (!recipients.length) continue;
     const [invoices, customers, tasks, records] = await Promise.all([
