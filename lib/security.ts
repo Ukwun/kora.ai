@@ -1,5 +1,7 @@
 import { NextRequest } from "next/server";
 import { postgresEnabled, query } from "./db";
+import { Redis } from "@upstash/redis";
+import { Ratelimit } from "@upstash/ratelimit";
 
 export type OrganizationUser = {
   id: string;
@@ -11,6 +13,7 @@ export type OrganizationUser = {
 
 // Rate limiting storage (in production, use Redis)
 const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
+const distributedLimiters = new Map<string, Ratelimit>();
 
 // Audit log types
 export type AuditLogAction =
@@ -95,6 +98,18 @@ export function checkRateLimit(
 
   limiter.count++;
   return true;
+}
+
+export async function checkDistributedRateLimit(identifier: string, limit = 100, windowSeconds = 60) {
+  if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) return checkRateLimit(identifier, limit, windowSeconds);
+  const key = `${limit}:${windowSeconds}`;
+  let limiter = distributedLimiters.get(key);
+  if (!limiter) {
+    limiter = new Ratelimit({ redis: Redis.fromEnv(), limiter: Ratelimit.slidingWindow(limit, `${windowSeconds} s`), analytics: true, prefix: "kora" });
+    distributedLimiters.set(key, limiter);
+  }
+  const result = await limiter.limit(identifier);
+  return result.success;
 }
 
 // Extract client IP from request

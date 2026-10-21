@@ -9,7 +9,7 @@ type LeadRequest = {
   data: { packageLabel?: string; fulfillmentStatus?: string; paymentStatus?: string; requestedMonthlyVolume?: number; targeting?: { country?: string; region?: string } };
 };
 
-type IntegrationState = { connected: boolean; requestedAt: string | null; capability: string; message: string };
+type IntegrationState = { connected: boolean; requestedAt: string | null; capability: string; oauthConfigured?: boolean; message: string };
 
 const fieldClass = "mt-1 w-full rounded-xl border border-white/10 bg-[#0b0b14] px-3 py-2.5 text-sm text-white outline-none transition focus:border-violet-300/50";
 const buttonClass = "rounded-xl border border-violet-300/30 bg-violet-500/10 px-4 py-2.5 text-sm font-medium text-violet-100 transition hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-50";
@@ -99,6 +99,16 @@ export function GrowthAndConnections({ canManage }: { canManage: boolean }) {
     }
   }
 
+  async function connectWhatsApp() {
+    setBusy(true); setError("");
+    try {
+      const response = await fetch("/api/integrations/whatsapp/connect", { cache: "no-store" });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "WhatsApp connection is not configured.");
+      window.location.assign(result.url);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "WhatsApp connection is not configured."); setBusy(false); }
+  }
+
   async function requestSubscription(plan: "pilot" | "steady" | "scale") {
     if (!canManage) return;
     setBusy(true); setError(""); setNotice("");
@@ -155,7 +165,8 @@ export function GrowthAndConnections({ canManage }: { canManage: boolean }) {
           <p className="text-sm font-medium">Connection is not available yet</p>
           <p className="mt-2 text-sm leading-6 text-slate-400">A real connection needs Meta Business authorization, secure token storage and customer opt-in controls. Until those are configured, Kora will not read conversations or send messages.</p>
           {canManage && !whatsapp?.requestedAt && <label className="mt-4 flex items-start gap-3 text-xs leading-5 text-slate-400"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} className="mt-1 accent-violet-400" /><span>I am authorized to request setup for this workspace’s WhatsApp Business account.</span></label>}
-          {canManage && !whatsapp?.requestedAt && <button type="button" disabled={!confirmed || busy} onClick={() => void requestWhatsApp()} className={`${buttonClass} mt-3`}>{busy ? "Recording request…" : "Record setup request"}</button>}
+          {canManage && whatsapp?.oauthConfigured && <button type="button" disabled={busy} onClick={() => void connectWhatsApp()} className={`${buttonClass} mt-3`}>{busy ? "Opening Meta…" : "Connect WhatsApp Business"}</button>}
+          {canManage && !whatsapp?.oauthConfigured && !whatsapp?.requestedAt && <button type="button" disabled={!confirmed || busy} onClick={() => void requestWhatsApp()} className={`${buttonClass} mt-3`}>{busy ? "Recording request…" : "Record setup request"}</button>}
           {whatsapp?.requestedAt && <p className="mt-3 text-xs text-slate-400">No customer has been contacted. Customer consent and message approval will be required before any future outreach.</p>}
         </div>
       </div>}

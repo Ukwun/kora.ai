@@ -6,7 +6,7 @@ import { answerBusinessQuestion } from "@/lib/ai-intelligence";
 import { buildAuthorizedAIContext } from "@/lib/ai-context";
 import { createBusinessMemoryRecord, listBusinessMemoryRecords } from "@/lib/business-memory-records";
 import {
-  checkRateLimit,
+  checkDistributedRateLimit,
   getClientIP,
   logAudit,
   canPerformAction,
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
 
   // Rate limiting - 100 AI requests per minute per user
   const rateLimitKey = `ai_${session.id}`;
-  if (!checkRateLimit(rateLimitKey, 100, 60)) {
+  if (!(await checkDistributedRateLimit(rateLimitKey, 100, 60))) {
     await logAudit({
       userId: session.id,
       organizationId: session.organizationId,

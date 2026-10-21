@@ -4,6 +4,10 @@ export function isWhatsAppConfigured() {
   return Boolean(process.env.WHATSAPP_ACCESS_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID);
 }
 
+export function isWhatsAppOAuthConfigured() {
+  return Boolean((process.env.WHATSAPP_CLIENT_ID || process.env.WHATSAPP_APP_ID) && (process.env.WHATSAPP_CLIENT_SECRET || process.env.WHATSAPP_APP_SECRET) && process.env.WHATSAPP_REDIRECT_URI);
+}
+
 export function getWhatsAppCapability() {
   return isWhatsAppConfigured() ? "configured" : "not_configured";
 }

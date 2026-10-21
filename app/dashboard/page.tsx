@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import OperationalRecords, { BusinessAssistant, BusinessProfileEditor, DASHBOARD_DATA_CHANGED_EVENT, TeamWorkspace, WeeklyBusinessReport } from "@/app/components/OperationalRecords";
 import { BrowserActivityAlerts, GrowthAndConnections } from "@/app/components/GrowthAndConnections";
 import NotificationSettings from "@/app/components/NotificationSettings";
+import LeadFulfillmentAdmin from "@/app/components/LeadFulfillmentAdmin";
+import WhatsAppApprovalQueue from "@/app/components/WhatsAppApprovalQueue";
+import WhatsAppTemplateManager from "@/app/components/WhatsAppTemplateManager";
 
 type Role = "owner" | "admin" | "manager" | "employee";
 type Customer = { id: string; name: string; email?: string; status: string; createdAt: string };
@@ -172,6 +175,9 @@ export default function DashboardPage() {
     </section>
     <GrowthAndConnections canManage={canInvoice} />
     <NotificationSettings />
+    <LeadFulfillmentAdmin />
+    <WhatsAppApprovalQueue />
+    <WhatsAppTemplateManager />
     <section className="rounded-2xl border border-white/10 bg-white/[0.025] p-5 sm:p-6">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center"><div><p className="text-xs uppercase tracking-[0.18em] text-violet-300">Business memory</p><h2 className="mt-2 text-xl font-semibold">Context that compounds</h2><p className="mt-1 text-sm leading-6 text-slate-400">Structured records are kept separate from chat history and carry their source and verification state.</p></div><button type="button" disabled={!canInvoice || saving} onClick={refreshRecommendations} className="rounded-xl border border-violet-300/30 px-4 py-3 text-sm font-semibold text-violet-100 transition hover:bg-violet-500/10 disabled:cursor-not-allowed disabled:opacity-50">{saving ? "Reviewing…" : "Review records for actions"}</button></div>
       {memoryRecords.some((record) => record.entityType === "ai_recommendation" && record.status === "pending_approval") && <div className="mt-5 space-y-3">{memoryRecords.filter((record) => record.entityType === "ai_recommendation" && record.status === "pending_approval").map((record) => <article key={record.id} className="rounded-xl border border-amber-300/20 bg-amber-300/[0.04] p-4"><div className="flex flex-col justify-between gap-4 md:flex-row md:items-center"><div><p className="font-medium">{record.title}</p><p className="mt-1 text-sm text-slate-400">{record.summary}</p><p className="mt-2 text-xs text-slate-500">Source: {record.source} · {record.verificationStatus} · Approval records consent only.</p></div><div className="flex gap-2"><button type="button" disabled={!canInvoice || saving} onClick={() => decideRecommendation(record.id, "approved")} className="rounded-lg bg-violet-500 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Approve</button><button type="button" disabled={!canInvoice || saving} onClick={() => decideRecommendation(record.id, "rejected")} className="rounded-lg border border-white/15 px-3 py-2 text-xs text-slate-200 disabled:opacity-50">Reject</button></div></div></article>)}</div>}

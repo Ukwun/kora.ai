@@ -1,4 +1,7 @@
+import { alertCronFailure } from "./_alert.mjs";
+
 export default async function weeklyReview() {
+ try {
   const siteUrl = process.env.APP_URL || process.env.URL;
   const secret = process.env.WEEKLY_REPORT_SECRET;
   if (!siteUrl || !secret) throw new Error("APP_URL (or Netlify URL) and WEEKLY_REPORT_SECRET are required.");
@@ -9,6 +12,7 @@ export default async function weeklyReview() {
   const result = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(`Weekly report delivery failed (${response.status}): ${result.error ?? "unknown error"}`);
   console.log(`Weekly reports delivered to ${result.sent} opted-in workspace members.`);
+ } catch (error) { await alertCronFailure("weekly review", error); throw error; }
 }
 
 export const config = { schedule: "0 8 * * 1" };
