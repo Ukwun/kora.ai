@@ -74,7 +74,8 @@ function AuthForm() {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Authentication failed.");
       if (result.needsVerification) {
-        if (result.developmentVerificationUrl) router.push(result.developmentVerificationUrl);
+        if (result.authenticated) router.push("/onboarding");
+        else if (result.developmentVerificationUrl) router.push(result.developmentVerificationUrl);
         else {
           setMode("signin");
           setStatus(result.message);
