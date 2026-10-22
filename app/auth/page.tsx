@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import PasswordInput from "@/app/components/PasswordInput";
 
 const oauthErrors: Record<string, string> = {
   oauth_not_configured: "That sign-in option is not configured yet. Use your email and password or try again later.",
@@ -143,10 +144,9 @@ function AuthForm() {
               placeholder="Work email"
               className="w-full border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition focus:border-violet-400"
             />
-            <input
+            <PasswordInput
               required
               minLength={8}
-              type="password"
               autoComplete={mode === "signup" ? "new-password" : "current-password"}
               value={form.password}
               onChange={(event) => setForm({ ...form, password: event.target.value })}
@@ -154,10 +154,9 @@ function AuthForm() {
               className="w-full border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition focus:border-violet-400"
             />
             {mode === "signup" && (
-              <input
+              <PasswordInput
                 required
                 minLength={8}
-                type="password"
                 autoComplete="new-password"
                 value={form.confirmPassword}
                 onChange={(event) => setForm({ ...form, confirmPassword: event.target.value })}
