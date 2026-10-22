@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type PointerEvent } from "react";
+import { useEffect, useRef, useState, type PointerEvent } from "react";
 
 const features = [
   {
@@ -168,6 +168,8 @@ export default function HomeExperience() {
   const [activeFeature, setActiveFeature] = useState<FeatureId>("people");
   const [gaze, setGaze] = useState({ x: 0, y: 0 });
   const [blinking, setBlinking] = useState(false);
+  const gazeTarget = useRef({ x: 0, y: 0 });
+  const lastPointerAt = useRef(0);
   const active = features.find((feature) => feature.id === activeFeature) ?? features[0];
 
   useEffect(() => {
@@ -195,6 +197,52 @@ export default function HomeExperience() {
   }, []);
 
   useEffect(() => {
+    let animationFrame = 0;
+    let disposed = false;
+
+    const animateGaze = () => {
+      if (disposed) return;
+      setGaze((current) => {
+        const next = {
+          x: current.x + (gazeTarget.current.x - current.x) * 0.16,
+          y: current.y + (gazeTarget.current.y - current.y) * 0.16,
+        };
+        return Math.abs(next.x - current.x) < 0.02 && Math.abs(next.y - current.y) < 0.02 ? gazeTarget.current : next;
+      });
+      animationFrame = window.requestAnimationFrame(animateGaze);
+    };
+
+    animationFrame = window.requestAnimationFrame(animateGaze);
+    return () => {
+      disposed = true;
+      window.cancelAnimationFrame(animationFrame);
+    };
+  }, []);
+
+  useEffect(() => {
+    const updateFromViewport = (clientX: number, clientY: number) => {
+      const x = Math.max(-13, Math.min(13, (clientX / Math.max(window.innerWidth, 1) - 0.5) * 26));
+      const y = Math.max(-10, Math.min(10, (clientY / Math.max(window.innerHeight, 1) - 0.5) * 20));
+      gazeTarget.current = { x, y };
+      lastPointerAt.current = Date.now();
+    };
+    const handlePointerMove = (event: globalThis.PointerEvent) => {
+      if (event.pointerType !== "touch") updateFromViewport(event.clientX, event.clientY);
+    };
+    const idleMotion = window.setInterval(() => {
+      if (Date.now() - lastPointerAt.current < 3500) return;
+      const time = Date.now() / 1100;
+      gazeTarget.current = { x: Math.sin(time) * 3.2, y: Math.cos(time * 0.8) * 2.2 };
+    }, 1200);
+
+    window.addEventListener("pointermove", handlePointerMove, { passive: true });
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.clearInterval(idleMotion);
+    };
+  }, []);
+
+  useEffect(() => {
     const sections = document.querySelectorAll<HTMLElement>("[data-kora-feature]");
     const observer = new IntersectionObserver(
       (entries) => {
@@ -217,10 +265,11 @@ export default function HomeExperience() {
 
   function followPointer(event: PointerEvent<HTMLDivElement>) {
     if (event.pointerType === "touch") return;
-    const bounds = event.currentTarget.getBoundingClientRect();
-    const x = (event.clientX - bounds.left) / bounds.width - 0.5;
-    const y = (event.clientY - bounds.top) / bounds.height - 0.5;
-    setGaze({ x: Math.round(x * 13), y: Math.round(y * 10) });
+    gazeTarget.current = {
+      x: Math.max(-13, Math.min(13, (event.clientX / Math.max(window.innerWidth, 1) - 0.5) * 26)),
+      y: Math.max(-10, Math.min(10, (event.clientY / Math.max(window.innerHeight, 1) - 0.5) * 20)),
+    };
+    lastPointerAt.current = Date.now();
   }
 
   return (
@@ -267,7 +316,7 @@ export default function HomeExperience() {
           <div className="kora-orbit kora-orbit-two" />
           <div className="kora-orbit-point kora-orbit-point-one" />
           <div className="kora-orbit-point kora-orbit-point-two" />
-          <div className="kora-face-frame" data-mode={activeFeature} onPointerMove={followPointer} onPointerLeave={() => setGaze({ x: 0, y: 0 })}>
+          <div className="kora-face-frame" data-mode={activeFeature} onPointerMove={followPointer}>
             <div className="kora-face-halo" />
             <RobotFace idPrefix="hero" activeFeature={activeFeature} blinking={blinking} gaze={gaze} />
             <span className="kora-face-corner kora-face-corner-tl" />
@@ -319,7 +368,6 @@ export default function HomeExperience() {
             className="kora-face-frame kora-story-face-frame"
             data-mode={activeFeature}
             onPointerMove={followPointer}
-            onPointerLeave={() => setGaze({ x: 0, y: 0 })}
           >
             <RobotFace idPrefix="story" activeFeature={activeFeature} blinking={blinking} gaze={gaze} />
           </div>
