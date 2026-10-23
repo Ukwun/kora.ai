@@ -497,6 +497,10 @@ export async function deleteOrganization(organizationId: string) {
 }
 
 export async function updateOrganizationProfile(organizationId: string, changes: Pick<Organization, "name" | "industry" | "currency" | "timezone">) {
+  if (postgresEnabled) {
+    const result = await query<Organization>(`UPDATE organizations SET name = $2, industry = $3, currency = $4, timezone = $5 WHERE id = $1 RETURNING id, name, industry, timezone, currency, created_at AS "createdAt"`, [organizationId, changes.name, changes.industry, changes.currency, changes.timezone]);
+    return result.rows[0] ?? null;
+  }
   const database = await readDatabase();
   const organization = database.organizations.find((entry) => entry.id === organizationId);
   if (!organization) return null;
@@ -549,6 +553,28 @@ export async function findBusinessProfile(userId: string, organizationId: string
 }
 
 export async function saveBusinessProfile(profile: BusinessProfile) {
+  if (postgresEnabled) {
+    const { id, userId, organizationId, createdAt, updatedAt, ...profileData } = profile;
+    await query(`INSERT INTO business_profiles (id, user_id, organization_id, data, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (user_id, organization_id) DO UPDATE SET data = EXCLUDED.data, updated_at = EXCLUDED.updated_at`, [id, userId, organizationId, profileData, createdAt, updatedAt]);
+    try {
+      await recordStructuredEntityMemory({
+        organizationId: profile.organizationId,
+        createdBy: profile.userId,
+        entityType: "organization_profile",
+        entityId: profile.id,
+        title: profile.businessName || "Business profile",
+        summary: `${profile.industry || profile.type} business · ${profile.employees} employees · focus: ${profile.mainChallenge.replace(/_/g, " ")}`,
+        source: "user_confirmed",
+        verificationStatus: "user_confirmed",
+        data: {
+          businessName: profile.businessName, industry: profile.industry, country: profile.country, currency: profile.currency, timezone: profile.timezone, type: profile.type, employees: profile.employees, customersPerMonth: profile.customersPerMonth, monthlyRevenueRange: profile.monthlyRevenueRange, offerings: profile.offerings, goals: profile.goals, communicationChannels: profile.communicationChannels, preferredPaymentMethods: profile.preferredPaymentMethods, workingHours: profile.workingHours, reportingPreferences: profile.reportingPreferences, software: profile.existingSoftware, mainChallenge: profile.mainChallenge, profileSource: profile.profileSource, profileUpdatedAt: profile.profileUpdatedAt, integrations: profile.integrations.map(({ type, connected, connectedAt }) => ({ type, connected, connectedAt })), onboardingComplete: profile.onboardingComplete,
+        },
+      });
+    } catch (error) {
+      console.error("Unable to mirror the saved business profile into business memory.", error);
+    }
+    return profile;
+  }
   const db = await readDatabase();
   const existingIndex = db.profiles.findIndex((entry) => entry.id === profile.id);
 
