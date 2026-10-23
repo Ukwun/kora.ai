@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, type PointerEvent } from "react";
+import KoraModel from "./KoraModel";
 
 const features = [
   {
@@ -318,7 +319,7 @@ export default function HomeExperience() {
           <div className="kora-orbit-point kora-orbit-point-two" />
           <div className="kora-face-frame" data-mode={activeFeature} onPointerMove={followPointer}>
             <div className="kora-face-halo" />
-            <RobotFace idPrefix="hero" activeFeature={activeFeature} blinking={blinking} gaze={gaze} />
+            <KoraModel gaze={gaze} fallback={<RobotFace idPrefix="hero" activeFeature={activeFeature} blinking={blinking} gaze={gaze} />} />
             <span className="kora-face-corner kora-face-corner-tl" />
             <span className="kora-face-corner kora-face-corner-br" />
           </div>

@@ -8,6 +8,7 @@ import NotificationSettings from "@/app/components/NotificationSettings";
 import LeadFulfillmentAdmin from "@/app/components/LeadFulfillmentAdmin";
 import WhatsAppApprovalQueue from "@/app/components/WhatsAppApprovalQueue";
 import WhatsAppTemplateManager from "@/app/components/WhatsAppTemplateManager";
+import ChatHub from "@/app/components/ChatHub";
 
 type Role = "owner" | "admin" | "manager" | "employee";
 type Customer = { id: string; name: string; email?: string; status: string; createdAt: string };
@@ -30,7 +31,7 @@ const money = (value: number, currency: string) => new Intl.NumberFormat(undefin
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [user, setUser] = useState<{ name: string; role: Role } | null>(null);
+  const [user, setUser] = useState<{ id: string; name: string; role: Role } | null>(null);
   const [workspaces, setWorkspaces] = useState<Array<{ id: string; name?: string; role: Role }>>([]);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState("");
   const [currency, setCurrency] = useState("NGN");
@@ -188,6 +189,7 @@ export default function DashboardPage() {
     <BusinessAssistant />
     <OperationalRecords canManage={canManage} canDelete={canInvoice} currency={currency} />
     <TeamWorkspace canAdminister={canInvoice} />
+    {user && <ChatHub currentUserId={user.id} currentUserRole={titleCase(user.role)} />}
     <WeeklyBusinessReport />
     <section><div className="mb-3 flex items-end justify-between"><div><p className="text-xs uppercase tracking-[0.18em] text-violet-300">Actions</p><h2 className="mt-1 text-xl font-semibold">Make the next change</h2></div><p className="text-xs text-slate-500">Your role: {titleCase(user.role)}</p></div><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{actions.map((item) => <button key={item.label} type="button" disabled={!item.enabled} onClick={item.click} className="group rounded-xl border border-white/10 bg-[#101019] p-5 text-left transition duration-200 hover:-translate-y-0.5 hover:border-violet-300/45 hover:bg-violet-500/10 disabled:cursor-not-allowed disabled:opacity-45"><p className="font-semibold group-hover:text-violet-200">{item.label}</p><p className="mt-2 text-sm text-slate-400">{item.detail}</p>{!item.enabled && <p className="mt-3 text-xs text-amber-300">Requires a higher workspace role</p>}</button>)}</div></section>
     <section className="grid gap-6 lg:grid-cols-2"><Panel id="tasks" title="Recent tasks" eyebrow="Work queue" right={`${tasks.length} total`}>{tasks.slice(0, 6).map((task) => <div key={task.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-black/20 px-4 py-3"><div className="min-w-0"><p className="truncate text-sm font-medium">{task.title}</p><p className="mt-1 text-xs text-slate-500">{titleCase(task.priority)} priority</p></div><span className="rounded-full bg-white/5 px-2.5 py-1 text-xs text-slate-300">{titleCase(task.status)}</span></div>)}{tasks.length === 0 && <Empty text="No tasks yet. Create one when work needs a clear owner." />}</Panel><Panel title="What changed recently" eyebrow="Business activity" right="Updates every 15 sec">{activity.slice(0, 6).map((event) => <div key={event.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-black/20 px-4 py-3"><div><p className="text-sm font-medium">{event.actorName ? `${event.actorName} · ` : ""}{titleCase(event.type)}</p><p className="mt-1 text-xs text-slate-500">{new Date(event.createdAt).toLocaleString("en-NG", { dateStyle: "medium", timeStyle: "short" })}</p></div><span className="h-2 w-2 shrink-0 rounded-full bg-violet-400" /></div>)}{activity.length === 0 && <Empty text="New customers, tasks and invoices will appear here as they are created." />}</Panel></section>

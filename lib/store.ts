@@ -15,6 +15,7 @@ export type BusinessUser = {
   email: string;
   passwordHash: string;
   role: UserRole;
+  title?: string;
   organizationId: string;
   createdAt: string;
   emailVerified: boolean;
@@ -140,6 +141,33 @@ export type BillingSubscription = {
   updatedAt: string;
 };
 
+export type ChatThread = {
+  id: string;
+  organizationId: string;
+  participants: string[];
+  createdBy: string;
+  status: "pending" | "active" | "rejected";
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ChatMessage = {
+  id: string;
+  threadId: string;
+  organizationId: string;
+  senderId: string;
+  senderName: string;
+  content: string;
+  attachment?: {
+    kind: "file" | "image" | "video" | "pdf";
+    name: string;
+    url?: string;
+    sizeLabel?: string;
+  } | null;
+  createdAt: string;
+  status: "sent" | "delivered" | "read";
+};
+
 export type AppDatabase = {
   schemaVersion: number;
   organizations: Organization[];
@@ -155,6 +183,8 @@ export type AppDatabase = {
   passwordResetTokens: PasswordResetToken[];
   emailVerificationTokens: EmailVerificationToken[];
   billingSubscriptions: BillingSubscription[];
+  chatThreads: ChatThread[];
+  chatMessages: ChatMessage[];
   businessMemoryRecords: BusinessMemoryRecord[];
   businessMemoryAuditEvents: MemoryAuditEvent[];
 };
@@ -184,6 +214,8 @@ function defaultDatabaseForDevelopment(): AppDatabase {
     passwordResetTokens: [],
     emailVerificationTokens: [],
     billingSubscriptions: [],
+    chatThreads: [],
+    chatMessages: [],
     businessMemoryRecords: [],
     businessMemoryAuditEvents: [],
   };
@@ -207,6 +239,31 @@ const defaultUsers: BusinessUser[] = [
     email: "demo@kora.ng",
     passwordHash: bcrypt.hashSync("demo1234", 10),
     role: "owner",
+    title: "Founder & CEO",
+    organizationId: "org_kora_1",
+    emailVerified: true,
+    accountStatus: "active",
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: "user_demo_2",
+    name: "Aisha Bello",
+    email: "ops@kora.ng",
+    passwordHash: bcrypt.hashSync("demo1234", 10),
+    role: "admin",
+    title: "Operations Lead",
+    organizationId: "org_kora_1",
+    emailVerified: true,
+    accountStatus: "active",
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: "user_demo_3",
+    name: "Musa Danjuma",
+    email: "sales@kora.ng",
+    passwordHash: bcrypt.hashSync("demo1234", 10),
+    role: "manager",
+    title: "Sales Manager",
     organizationId: "org_kora_1",
     emailVerified: true,
     accountStatus: "active",
@@ -257,6 +314,8 @@ export async function readDatabase(): Promise<AppDatabase> {
       passwordResetTokens: parsed.passwordResetTokens ?? defaultDatabase.passwordResetTokens,
       emailVerificationTokens: parsed.emailVerificationTokens ?? defaultDatabase.emailVerificationTokens,
       billingSubscriptions: parsed.billingSubscriptions ?? defaultDatabase.billingSubscriptions,
+      chatThreads: parsed.chatThreads ?? defaultDatabase.chatThreads,
+      chatMessages: parsed.chatMessages ?? defaultDatabase.chatMessages,
       businessMemoryRecords: parsed.businessMemoryRecords ?? defaultDatabase.businessMemoryRecords,
       businessMemoryAuditEvents: parsed.businessMemoryAuditEvents ?? defaultDatabase.businessMemoryAuditEvents,
     };
@@ -279,7 +338,7 @@ export async function writeDatabase(data: AppDatabase) {
 async function readPostgresDatabase(): Promise<AppDatabase> {
   const [organizations, users, onboarding, profiles, customers, tasks, invoices, payments, activityEvents, memberships, passwordResetTokens, emailVerificationTokens, billingSubscriptions] = await Promise.all([
     query<Organization>("SELECT id, name, industry, timezone, currency, created_at AS \"createdAt\" FROM organizations"),
-    query<BusinessUser>("SELECT id, name, email, password_hash AS \"passwordHash\", role, organization_id AS \"organizationId\", created_at AS \"createdAt\", email_verified AS \"emailVerified\", account_status AS \"accountStatus\" FROM users"),
+    query<BusinessUser>("SELECT id, name, email, password_hash AS \"passwordHash\", role, title, organization_id AS \"organizationId\", created_at AS \"createdAt\", email_verified AS \"emailVerified\", account_status AS \"accountStatus\" FROM users"),
     query<OnboardingState>("SELECT user_id AS \"userId\", business_name AS \"businessName\", industry, goals, tools, challenges, created_at AS \"createdAt\" FROM onboarding_states"),
     query<{ id: string; userId: string; organizationId: string; data: Partial<BusinessProfile>; createdAt: string; updatedAt: string }>("SELECT id, user_id AS \"userId\", organization_id AS \"organizationId\", data, created_at AS \"createdAt\", updated_at AS \"updatedAt\" FROM business_profiles"),
     query<Customer>("SELECT id, organization_id AS \"organizationId\", name, email, phone, status, notes, created_by AS \"createdBy\", created_at AS \"createdAt\", updated_at AS \"updatedAt\" FROM customers"),
@@ -308,6 +367,8 @@ async function readPostgresDatabase(): Promise<AppDatabase> {
     passwordResetTokens: passwordResetTokens.rows,
     emailVerificationTokens: emailVerificationTokens.rows,
     billingSubscriptions: billingSubscriptions.rows,
+    chatThreads: [],
+    chatMessages: [],
     businessMemoryRecords: [],
     businessMemoryAuditEvents: [],
   };
@@ -316,7 +377,7 @@ async function readPostgresDatabase(): Promise<AppDatabase> {
 async function writePostgresDatabase(data: AppDatabase) {
   await withTransaction(async (client) => {
     for (const organization of data.organizations) await client.query("INSERT INTO organizations (id, name, industry, timezone, currency, created_at) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name, industry=EXCLUDED.industry, timezone=EXCLUDED.timezone, currency=EXCLUDED.currency", [organization.id, organization.name, organization.industry, organization.timezone, organization.currency, organization.createdAt]);
-    for (const user of data.users) await client.query("INSERT INTO users (id, organization_id, name, email, password_hash, role, created_at, email_verified, account_status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (id) DO UPDATE SET organization_id=EXCLUDED.organization_id, name=EXCLUDED.name, email=EXCLUDED.email, password_hash=EXCLUDED.password_hash, role=EXCLUDED.role, email_verified=EXCLUDED.email_verified, account_status=EXCLUDED.account_status", [user.id, user.organizationId, user.name, user.email, user.passwordHash, user.role, user.createdAt, user.emailVerified, user.accountStatus]);
+    for (const user of data.users) await client.query("INSERT INTO users (id, organization_id, name, email, password_hash, role, title, created_at, email_verified, account_status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (id) DO UPDATE SET organization_id=EXCLUDED.organization_id, name=EXCLUDED.name, email=EXCLUDED.email, password_hash=EXCLUDED.password_hash, role=EXCLUDED.role, title=EXCLUDED.title, email_verified=EXCLUDED.email_verified, account_status=EXCLUDED.account_status", [user.id, user.organizationId, user.name, user.email, user.passwordHash, user.role, user.title ?? null, user.createdAt, user.emailVerified, user.accountStatus]);
     for (const profile of data.profiles) {
       const { id, userId, organizationId, createdAt, updatedAt, ...profileData } = profile;
       await client.query("INSERT INTO business_profiles (id, user_id, organization_id, data, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data, updated_at=EXCLUDED.updated_at", [id, userId, organizationId, profileData, createdAt, updatedAt]);
@@ -336,7 +397,7 @@ async function writePostgresDatabase(data: AppDatabase) {
 
 export async function findUserByEmail(email: string) {
   if (postgresEnabled) {
-    const result = await query<BusinessUser>(`SELECT id, name, email, password_hash AS "passwordHash", role, organization_id AS "organizationId", created_at AS "createdAt", email_verified AS "emailVerified", account_status AS "accountStatus" FROM users WHERE LOWER(email) = $1 LIMIT 1`, [email.toLowerCase()]);
+    const result = await query<BusinessUser>(`SELECT id, name, email, password_hash AS "passwordHash", role, title, organization_id AS "organizationId", created_at AS "createdAt", email_verified AS "emailVerified", account_status AS "accountStatus" FROM users WHERE LOWER(email) = $1 LIMIT 1`, [email.toLowerCase()]);
     return result.rows[0] ?? null;
   }
   const db = await readDatabase();
