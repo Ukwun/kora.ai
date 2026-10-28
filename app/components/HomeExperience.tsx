@@ -370,7 +370,7 @@ export default function HomeExperience() {
             data-mode={activeFeature}
             onPointerMove={followPointer}
           >
-            <RobotFace idPrefix="story" activeFeature={activeFeature} blinking={blinking} gaze={gaze} />
+            <KoraModel gaze={gaze} blinking={blinking} expression={activeFeature} />
           </div>
           <div className="kora-story-caption" aria-live="polite">
             <span>NOW EXPLORING · {active.number}</span>
