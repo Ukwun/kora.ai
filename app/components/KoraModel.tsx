@@ -84,6 +84,24 @@ export default function KoraModel({ gaze, blinking, expression }: { gaze: { x: n
   }, [visible]);
 
   useEffect(() => {
+    if (!ready || !visible) return;
+    const element = containerRef.current?.querySelector("[data-kora-model]");
+    if (!element) return;
+    const handleLoad = () => setModelLoaded(true);
+    const handleError = () => setFailed(true);
+    element.addEventListener("load", handleLoad);
+    element.addEventListener("error", handleError);
+    const timeout = window.setTimeout(() => {
+      if (!modelLoaded) setFailed(true);
+    }, 30000);
+    return () => {
+      element.removeEventListener("load", handleLoad);
+      element.removeEventListener("error", handleError);
+      window.clearTimeout(timeout);
+    };
+  }, [ready, visible, retryNonce, modelLoaded]);
+
+  useEffect(() => {
     if (!visible) return;
     const preload = document.createElement("link");
     preload.rel = "preload";
@@ -135,12 +153,10 @@ export default function KoraModel({ gaze, blinking, expression }: { gaze: { x: n
     };
   }, [ready, reducedMotion, modelLoaded]);
 
-  const loadingFallback = <div className="flex h-full w-full flex-col items-center justify-center gap-3 rounded-2xl border border-violet-300/15 bg-violet-500/[0.04] text-violet-100"><span className="h-8 w-8 animate-spin rounded-full border-2 border-violet-300/25 border-t-violet-200" /><span className="text-[10px] uppercase tracking-[0.18em] text-slate-400">Loading Kora 3D</span></div>;
-  const errorFallback = <div className="flex h-full w-full flex-col items-center justify-center gap-3 rounded-2xl border border-rose-300/20 bg-rose-500/[0.04] px-5 text-center"><p className="text-sm text-rose-100">Kora 3D could not load.</p><button type="button" onClick={() => { setFailed(false); setModelLoaded(false); setRetryNonce((value) => value + 1); }} className="rounded-lg border border-white/15 px-3 py-2 text-xs text-slate-200 transition hover:border-violet-300/40">Try again</button></div>;
+  const loadingFallback = <div className="pointer-events-none flex h-full w-full items-end justify-center pb-5 text-violet-100/70"><span className="text-[10px] uppercase tracking-[0.18em]">Loading Kora 3D</span></div>;
+  const errorFallback = <div className="flex h-full w-full flex-col items-center justify-center gap-3 px-5 text-center"><p className="text-sm text-rose-100">Kora 3D could not load.</p><button type="button" onClick={() => { setFailed(false); setModelLoaded(false); setRetryNonce((value) => value + 1); }} className="rounded-lg border border-white/15 px-3 py-2 text-xs text-slate-200 transition hover:border-violet-300/40">Try again</button></div>;
   const model = ready && visible && !failed ? createElement("model-viewer", {
     "data-kora-model": "true",
-    onError: () => setFailed(true),
-    onLoad: () => setModelLoaded(true),
     key: `kora-model-${retryNonce}`,
     src: retryNonce ? `/models/Korar1-mobile.glb?v=${retryNonce}` : "/models/Korar1-mobile.glb",
     alt: "Kora animated 3D assistant",
@@ -155,7 +171,7 @@ export default function KoraModel({ gaze, blinking, expression }: { gaze: { x: n
     cameraTarget: "0m 5.4m 0m",
     cameraOrbit: `${gaze.x * (mobile ? 0.1 : 0.18)}deg ${82 - gaze.y * 0.1}deg ${mobile ? "7m" : "8m"}`,
     fieldOfView: mobile ? "24deg" : "20deg",
-    style: { display: "block", width: "100%", height: "100%", background: "transparent", opacity: modelLoaded ? 1 : 0, transition: "opacity 500ms ease" },
+    style: { position: "absolute", inset: 0, display: "block", width: "100%", height: "100%", background: "transparent", opacity: modelLoaded ? 1 : 0, transition: "opacity 500ms ease" },
   }) : null;
 
   return <div ref={containerRef} className="relative h-full w-full">
