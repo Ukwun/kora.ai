@@ -6,13 +6,14 @@ type ModelViewerElement = HTMLElement & {
   model?: { scene?: { traverse: (callback: (object: Record<string, unknown>) => void) => void } };
 };
 
-export default function KoraModel({ gaze, blinking, expression, fallback }: { gaze: { x: number; y: number }; blinking: boolean; expression: "people" | "work" | "money" | "signals" | "team"; fallback: React.ReactNode }) {
+export default function KoraModel({ gaze, blinking, expression }: { gaze: { x: number; y: number }; blinking: boolean; expression: "people" | "work" | "money" | "signals" | "team" }) {
   const [ready, setReady] = useState(false);
   const [modelLoaded, setModelLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
   const [visible, setVisible] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
   const [mobile, setMobile] = useState(false);
+  const [retryNonce, setRetryNonce] = useState(0);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const modelRef = useRef<ModelViewerElement | null>(null);
   const gazeRef = useRef(gaze);
@@ -51,6 +52,7 @@ export default function KoraModel({ gaze, blinking, expression, fallback }: { ga
     if (!visible) return;
     let disposed = false;
     const sources = [
+      "/vendor/model-viewer.min.js",
       "https://unpkg.com/@google/model-viewer@4.1.0/dist/model-viewer.min.js",
       "https://cdn.jsdelivr.net/npm/@google/model-viewer@4.1.0/dist/model-viewer.min.js",
     ];
@@ -79,6 +81,17 @@ export default function KoraModel({ gaze, blinking, expression, fallback }: { ga
     };
     loadRuntime(0);
     return () => { disposed = true; };
+  }, [visible]);
+
+  useEffect(() => {
+    if (!visible) return;
+    const preload = document.createElement("link");
+    preload.rel = "preload";
+    preload.as = "fetch";
+    preload.href = "/models/Korar1-mobile.glb";
+    preload.crossOrigin = "anonymous";
+    document.head.appendChild(preload);
+    return () => preload.remove();
   }, [visible]);
 
   useEffect(() => {
@@ -122,12 +135,14 @@ export default function KoraModel({ gaze, blinking, expression, fallback }: { ga
     };
   }, [ready, reducedMotion, modelLoaded]);
 
-  const loadingFallback = <div className="relative flex h-full w-full items-center justify-center">{fallback}<span className="absolute bottom-3 rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[10px] uppercase tracking-[0.16em] text-slate-400">Kora is waking up</span></div>;
+  const loadingFallback = <div className="flex h-full w-full flex-col items-center justify-center gap-3 rounded-2xl border border-violet-300/15 bg-violet-500/[0.04] text-violet-100"><span className="h-8 w-8 animate-spin rounded-full border-2 border-violet-300/25 border-t-violet-200" /><span className="text-[10px] uppercase tracking-[0.18em] text-slate-400">Loading Kora 3D</span></div>;
+  const errorFallback = <div className="flex h-full w-full flex-col items-center justify-center gap-3 rounded-2xl border border-rose-300/20 bg-rose-500/[0.04] px-5 text-center"><p className="text-sm text-rose-100">Kora 3D could not load.</p><button type="button" onClick={() => { setFailed(false); setModelLoaded(false); setRetryNonce((value) => value + 1); }} className="rounded-lg border border-white/15 px-3 py-2 text-xs text-slate-200 transition hover:border-violet-300/40">Try again</button></div>;
   const model = ready && visible && !failed ? createElement("model-viewer", {
     "data-kora-model": "true",
     onError: () => setFailed(true),
     onLoad: () => setModelLoaded(true),
-    src: "/models/Korar1-mobile.glb",
+    key: `kora-model-${retryNonce}`,
+    src: retryNonce ? `/models/Korar1-mobile.glb?v=${retryNonce}` : "/models/Korar1-mobile.glb",
     alt: "Kora animated 3D assistant",
     reveal: "auto",
     loading: "eager",
@@ -145,6 +160,6 @@ export default function KoraModel({ gaze, blinking, expression, fallback }: { ga
 
   return <div ref={containerRef} className="relative h-full w-full">
     {model}
-    {(!modelLoaded || failed || !visible || !ready) && <div className="absolute inset-0">{visible && ready && !failed ? loadingFallback : fallback}</div>}
+    {(!modelLoaded || failed || !visible || !ready) && <div className="absolute inset-0">{failed ? errorFallback : loadingFallback}</div>}
   </div>;
 }
