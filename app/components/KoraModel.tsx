@@ -8,6 +8,7 @@ type ModelViewerElement = HTMLElement & {
 
 export default function KoraModel({ gaze, blinking, expression, fallback }: { gaze: { x: number; y: number }; blinking: boolean; expression: "people" | "work" | "money" | "signals" | "team"; fallback: React.ReactNode }) {
   const [ready, setReady] = useState(false);
+  const [modelLoaded, setModelLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
   const [visible, setVisible] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
@@ -47,7 +48,7 @@ export default function KoraModel({ gaze, blinking, expression, fallback }: { ga
   }, []);
 
   useEffect(() => {
-    if (!visible || reducedMotion) return;
+    if (!visible) return;
     let disposed = false;
     const sources = [
       "https://unpkg.com/@google/model-viewer@4.1.0/dist/model-viewer.min.js",
@@ -78,11 +79,11 @@ export default function KoraModel({ gaze, blinking, expression, fallback }: { ga
     };
     loadRuntime(0);
     return () => { disposed = true; };
-  }, [visible, reducedMotion]);
+  }, [visible]);
 
   useEffect(() => {
     if (!ready || reducedMotion) return;
-    modelRef.current = document.querySelector("[data-kora-model]") as ModelViewerElement | null;
+    modelRef.current = containerRef.current?.querySelector("[data-kora-model]") as ModelViewerElement | null;
     let frame = 0;
     const animateFace = () => {
       const scene = modelRef.current?.model?.scene;
@@ -119,29 +120,31 @@ export default function KoraModel({ gaze, blinking, expression, fallback }: { ga
       window.cancelAnimationFrame(frame);
       modelRef.current = null;
     };
-  }, [ready, reducedMotion]);
+  }, [ready, reducedMotion, modelLoaded]);
 
   const loadingFallback = <div className="relative flex h-full w-full items-center justify-center">{fallback}<span className="absolute bottom-3 rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[10px] uppercase tracking-[0.16em] text-slate-400">Kora is waking up</span></div>;
-  if (failed || !visible) return <div ref={containerRef} className="h-full w-full">{fallback}</div>;
-  if (!ready) return <div ref={containerRef} className="h-full w-full">{loadingFallback}</div>;
-
-  return createElement("model-viewer", {
+  const model = ready && visible && !failed ? createElement("model-viewer", {
     "data-kora-model": "true",
     onError: () => setFailed(true),
-    onLoad: () => setReady(true),
-    src: mobile ? "/models/Korar1-mobile.glb" : "/models/Korar1.glb",
+    onLoad: () => setModelLoaded(true),
+    src: "/models/Korar1-mobile.glb",
     alt: "Kora animated 3D assistant",
     reveal: "auto",
-    loading: "lazy",
+    loading: "eager",
     autoplay: !reducedMotion,
     animationName: reducedMotion ? undefined : "Armaturecorpo.001|Armaturecorpo.001|Armature|mixamo.com|Layer0",
     cameraControls: false,
     disableZoom: true,
     shadowIntensity: "0.8",
     exposure: "1.05",
-    cameraTarget: mobile ? "0m 5.4m 0m" : "0m 5.4m 0m",
+    cameraTarget: "0m 5.4m 0m",
     cameraOrbit: `${gaze.x * (mobile ? 0.1 : 0.18)}deg ${82 - gaze.y * 0.1}deg ${mobile ? "7m" : "8m"}`,
     fieldOfView: mobile ? "24deg" : "20deg",
-    style: { width: "100%", height: "100%", background: "transparent" },
-  });
+    style: { display: "block", width: "100%", height: "100%", background: "transparent", opacity: modelLoaded ? 1 : 0, transition: "opacity 500ms ease" },
+  }) : null;
+
+  return <div ref={containerRef} className="relative h-full w-full">
+    {model}
+    {(!modelLoaded || failed || !visible || !ready) && <div className="absolute inset-0">{visible && ready && !failed ? loadingFallback : fallback}</div>}
+  </div>;
 }
