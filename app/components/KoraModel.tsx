@@ -81,7 +81,7 @@ export default function KoraModel({ gaze, blinking, expression, fallback }: { ga
   }, [visible, reducedMotion]);
 
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || reducedMotion) return;
     modelRef.current = document.querySelector("[data-kora-model]") as ModelViewerElement | null;
     let frame = 0;
     const animateFace = () => {
@@ -119,10 +119,10 @@ export default function KoraModel({ gaze, blinking, expression, fallback }: { ga
       window.cancelAnimationFrame(frame);
       modelRef.current = null;
     };
-  }, [ready]);
+  }, [ready, reducedMotion]);
 
   const loadingFallback = <div className="relative flex h-full w-full items-center justify-center">{fallback}<span className="absolute bottom-3 rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[10px] uppercase tracking-[0.16em] text-slate-400">Kora is waking up</span></div>;
-  if (failed || reducedMotion || !visible) return <div ref={containerRef} className="h-full w-full">{fallback}</div>;
+  if (failed || !visible) return <div ref={containerRef} className="h-full w-full">{fallback}</div>;
   if (!ready) return <div ref={containerRef} className="h-full w-full">{loadingFallback}</div>;
 
   return createElement("model-viewer", {
@@ -131,15 +131,17 @@ export default function KoraModel({ gaze, blinking, expression, fallback }: { ga
     onLoad: () => setReady(true),
     src: mobile ? "/models/Korar1-mobile.glb" : "/models/Korar1.glb",
     alt: "Kora animated 3D assistant",
-    autoplay: true,
     reveal: "auto",
     loading: "lazy",
-    animationName: "Armaturecorpo.001|Armaturecorpo.001|Armature|mixamo.com|Layer0",
+    autoplay: !reducedMotion,
+    animationName: reducedMotion ? undefined : "Armaturecorpo.001|Armaturecorpo.001|Armature|mixamo.com|Layer0",
     cameraControls: false,
     disableZoom: true,
     shadowIntensity: "0.8",
     exposure: "1.05",
-    cameraOrbit: `${gaze.x * (mobile ? 0.1 : 0.18)}deg ${90 - gaze.y * 0.1}deg auto`,
+    cameraTarget: mobile ? "0m 5.4m 0m" : "0m 5.4m 0m",
+    cameraOrbit: `${gaze.x * (mobile ? 0.1 : 0.18)}deg ${82 - gaze.y * 0.1}deg ${mobile ? "7m" : "8m"}`,
+    fieldOfView: mobile ? "24deg" : "20deg",
     style: { width: "100%", height: "100%", background: "transparent" },
   });
 }
