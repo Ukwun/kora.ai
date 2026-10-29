@@ -17,7 +17,7 @@ export default function KoraModel({ gaze, blinking, expression }: { gaze: { x: n
   const [retryNonce, setRetryNonce] = useState(0);
   // Keep production on the tracked mobile asset until the compressed asset is
   // hosted on the CDN. This avoids a 404 and an unnecessary fallback cycle.
-  const [assetVariant, setAssetVariant] = useState<"draco" | "mobile">("mobile");
+  const [assetVariant, setAssetVariant] = useState<"fast" | "mobile">("fast");
   const containerRef = useRef<HTMLDivElement | null>(null);
   const modelRef = useRef<ModelViewerElement | null>(null);
   const gazeRef = useRef(gaze);
@@ -88,7 +88,7 @@ export default function KoraModel({ gaze, blinking, expression }: { gaze: { x: n
     const handleLoad = () => setModelLoaded(true);
     const handleError = () => {
       setModelLoaded(false);
-      if (assetVariant === "draco") setAssetVariant("mobile");
+      if (assetVariant === "fast") setAssetVariant("mobile");
       else setFailed(true);
     };
     element.addEventListener("load", handleLoad);
@@ -96,7 +96,7 @@ export default function KoraModel({ gaze, blinking, expression }: { gaze: { x: n
     const timeout = window.setTimeout(() => {
       if (modelLoaded) return;
       setModelLoaded(false);
-      if (assetVariant === "draco") setAssetVariant("mobile");
+      if (assetVariant === "fast") setAssetVariant("mobile");
     }, 30000);
     return () => {
       element.removeEventListener("load", handleLoad);
@@ -110,7 +110,7 @@ export default function KoraModel({ gaze, blinking, expression }: { gaze: { x: n
     const preload = document.createElement("link");
     preload.rel = "preload";
     preload.as = "fetch";
-    preload.href = assetVariant === "draco" ? "/models/Korar1-draco.glb" : "/models/Korar1-mobile.glb";
+    preload.href = assetVariant === "fast" ? "/models/Korar1-fast.glb" : "/models/Korar1-mobile.glb";
     preload.crossOrigin = "anonymous";
     document.head.appendChild(preload);
     return () => preload.remove();
@@ -158,11 +158,11 @@ export default function KoraModel({ gaze, blinking, expression }: { gaze: { x: n
   }, [ready, reducedMotion, modelLoaded]);
 
   const loadingFallback = <div className="pointer-events-none flex h-full w-full items-end justify-center pb-5 text-violet-100/70"><span className="text-[10px] uppercase tracking-[0.18em]">Loading Kora 3D</span></div>;
-  const errorFallback = <div className="flex h-full w-full flex-col items-center justify-center gap-3 px-5 text-center"><p className="text-sm text-rose-100">Kora 3D could not load.</p><button type="button" onClick={() => { setFailed(false); setModelLoaded(false); setAssetVariant("mobile"); setRetryNonce((value) => value + 1); }} className="rounded-lg border border-white/15 px-3 py-2 text-xs text-slate-200 transition hover:border-violet-300/40">Try again</button></div>;
+  const errorFallback = <div className="flex h-full w-full flex-col items-center justify-center gap-3 px-5 text-center"><p className="text-sm text-rose-100">Kora 3D could not load.</p><button type="button" onClick={() => { setFailed(false); setModelLoaded(false); setAssetVariant("fast"); setRetryNonce((value) => value + 1); }} className="rounded-lg border border-white/15 px-3 py-2 text-xs text-slate-200 transition hover:border-violet-300/40">Try again</button></div>;
   const model = visible && !failed ? createElement("model-viewer", {
     "data-kora-model": "true",
     key: `kora-model-${retryNonce}-${assetVariant}`,
-    src: assetVariant === "draco" ? `/models/Korar1-draco.glb?v=${retryNonce}` : `/models/Korar1-mobile.glb?v=${retryNonce}`,
+    src: assetVariant === "fast" ? `/models/Korar1-fast.glb?v=${retryNonce}` : `/models/Korar1-mobile.glb?v=${retryNonce}`,
     "draco-decoder-location": "https://www.gstatic.com/draco/versioned/decoders/1.5.6/",
     alt: "Kora animated 3D assistant",
     reveal: "auto",
