@@ -14,7 +14,6 @@ export default function KoraModel({ gaze, blinking, expression }: { gaze: { x: n
   // leaving some browsers with only the server-rendered loading label.
   const [visible, setVisible] = useState(true);
   const [reducedMotion, setReducedMotion] = useState(false);
-  const [mobile, setMobile] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
   // Keep production on the tracked mobile asset until the compressed asset is
   // hosted on the CDN. This avoids a 404 and an unnecessary fallback cycle.
@@ -37,19 +36,13 @@ export default function KoraModel({ gaze, blinking, expression }: { gaze: { x: n
     }, { rootMargin: "240px 0px", threshold: 0.01 });
     if (containerRef.current) observer.observe(containerRef.current);
     const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const viewportQuery = window.matchMedia("(max-width: 640px)");
     const motionTimer = window.setTimeout(() => setReducedMotion(motionQuery.matches), 0);
-    const viewportTimer = window.setTimeout(() => setMobile(viewportQuery.matches), 0);
     const updateMotion = () => setReducedMotion(motionQuery.matches);
-    const updateViewport = () => setMobile(viewportQuery.matches);
     motionQuery.addEventListener("change", updateMotion);
-    viewportQuery.addEventListener("change", updateViewport);
     return () => {
       observer.disconnect();
       window.clearTimeout(motionTimer);
-      window.clearTimeout(viewportTimer);
       motionQuery.removeEventListener("change", updateMotion);
-      viewportQuery.removeEventListener("change", updateViewport);
     };
   }, []);
 
@@ -175,14 +168,13 @@ export default function KoraModel({ gaze, blinking, expression }: { gaze: { x: n
     reveal: "auto",
     loading: "eager",
     autoplay: !reducedMotion,
-    animationName: reducedMotion ? undefined : "Armaturecorpo.001|Armaturecorpo.001|Armature|mixamo.com|Layer0",
+    "animation-name": reducedMotion ? undefined : "Armaturecorpo.001|Armaturecorpo.001|Armature|mixamo.com|Layer0",
     cameraControls: false,
-    disableZoom: true,
-    shadowIntensity: "0.8",
+    "disable-zoom": true,
+    "shadow-intensity": "0.8",
     exposure: "1.05",
-    cameraTarget: "0m 5.4m 0m",
-    cameraOrbit: `${gaze.x * (mobile ? 0.1 : 0.18)}deg ${82 - gaze.y * 0.1}deg ${mobile ? "7m" : "8m"}`,
-    fieldOfView: mobile ? "24deg" : "20deg",
+    "environment-image": "neutral",
+    "tone-mapping": "neutral",
     style: { position: "absolute", inset: 0, display: "block", width: "100%", height: "100%", background: "transparent" },
   }) : null;
 
