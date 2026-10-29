@@ -10,7 +10,9 @@ export default function KoraModel({ gaze, blinking, expression }: { gaze: { x: n
   const [ready, setReady] = useState(false);
   const [modelLoaded, setModelLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
-  const [visible, setVisible] = useState(false);
+  // The hero model must exist in the initial render. Lazy visibility was
+  // leaving some browsers with only the server-rendered loading label.
+  const [visible, setVisible] = useState(true);
   const [reducedMotion, setReducedMotion] = useState(false);
   const [mobile, setMobile] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
