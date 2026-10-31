@@ -53,6 +53,7 @@ const features = [
 ] as const;
 
 type FeatureId = (typeof features)[number]["id"];
+const expressionCycle: readonly FeatureId[] = ["people", "signals", "work", "team"];
 
 function RobotFace({
   idPrefix,
@@ -167,6 +168,7 @@ function RobotFace({
 
 export default function HomeExperience() {
   const [activeFeature, setActiveFeature] = useState<FeatureId>("people");
+  const [ambientExpression, setAmbientExpression] = useState<FeatureId>("people");
   const [gaze, setGaze] = useState({ x: 0, y: 0 });
   const [blinking, setBlinking] = useState(false);
   const gazeTarget = useRef({ x: 0, y: 0 });
@@ -198,18 +200,32 @@ export default function HomeExperience() {
   }, []);
 
   useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    let index = 0;
+    const expressionTimer = window.setInterval(() => {
+      index = (index + 1) % expressionCycle.length;
+      setAmbientExpression(expressionCycle[index]);
+    }, 5200);
+    return () => window.clearInterval(expressionTimer);
+  }, []);
+
+  useEffect(() => {
     let animationFrame = 0;
     let disposed = false;
+    let lastUpdate = 0;
 
-    const animateGaze = () => {
+    const animateGaze = (timestamp: number) => {
       if (disposed) return;
-      setGaze((current) => {
-        const next = {
-          x: current.x + (gazeTarget.current.x - current.x) * 0.16,
-          y: current.y + (gazeTarget.current.y - current.y) * 0.16,
-        };
-        return Math.abs(next.x - current.x) < 0.02 && Math.abs(next.y - current.y) < 0.02 ? gazeTarget.current : next;
-      });
+      if (timestamp - lastUpdate >= 1000 / 30) {
+        lastUpdate = timestamp;
+        setGaze((current) => {
+          const next = {
+            x: current.x + (gazeTarget.current.x - current.x) * 0.16,
+            y: current.y + (gazeTarget.current.y - current.y) * 0.16,
+          };
+          return Math.abs(next.x - current.x) < 0.02 && Math.abs(next.y - current.y) < 0.02 ? gazeTarget.current : next;
+        });
+      }
       animationFrame = window.requestAnimationFrame(animateGaze);
     };
 
@@ -292,8 +308,15 @@ export default function HomeExperience() {
               Get started <span aria-hidden="true">↗</span>
             </Link>
           </div>
-          <details className="kora-mobile-menu">
-            <summary aria-label="Open navigation menu"><span /><span /></summary>
+          <details
+            className="kora-mobile-menu"
+            onClick={(event) => {
+              if (event.target instanceof Element && event.target.closest("a")) {
+                event.currentTarget.open = false;
+              }
+            }}
+          >
+            <summary aria-label="Toggle navigation menu"><span /><span /></summary>
             <div className="kora-mobile-menu-panel">
               <a href="#capabilities">Capabilities</a>
               <a href="#how-it-works">How it works</a>
@@ -319,7 +342,13 @@ export default function HomeExperience() {
           <div className="kora-orbit-point kora-orbit-point-two" />
           <div className="kora-face-frame" data-mode={activeFeature} onPointerMove={followPointer}>
             <div className="kora-face-halo" />
-            <KoraModel gaze={gaze} blinking={blinking} expression={activeFeature} />
+            <KoraModel
+              gaze={gaze}
+              blinking={blinking}
+              expression={ambientExpression}
+              fallback={<RobotFace idPrefix="kora-hero" activeFeature={ambientExpression} blinking={blinking} gaze={gaze} />}
+              priority
+            />
             <span className="kora-face-corner kora-face-corner-tl" />
             <span className="kora-face-corner kora-face-corner-br" />
           </div>
@@ -370,7 +399,7 @@ export default function HomeExperience() {
             data-mode={activeFeature}
             onPointerMove={followPointer}
           >
-            <KoraModel gaze={gaze} blinking={blinking} expression={activeFeature} />
+            <RobotFace idPrefix="kora-story" activeFeature={ambientExpression} blinking={blinking} gaze={gaze} />
           </div>
           <div className="kora-story-caption" aria-live="polite">
             <span>NOW EXPLORING · {active.number}</span>

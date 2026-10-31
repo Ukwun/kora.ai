@@ -2000,6 +2000,10 @@ button {
     height: 340px;
   }
 
+  .kora-visual-note {
+    display: none;
+  }
+
   .kora-hero-visual .kora-visual-index {
     display: none;
   }
