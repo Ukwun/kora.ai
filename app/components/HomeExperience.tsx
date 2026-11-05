@@ -55,6 +55,24 @@ const features = [
 type FeatureId = (typeof features)[number]["id"];
 const leadMarkets = ["Africa", "UK & Europe", "China & Japan", "US & Canada", "Australia"] as const;
 const leadChannels = ["Email delivery", "Email strategy", "Cold DM strategy", "WhatsApp", "Campaign ads"] as const;
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
+function gazeForPointer(clientX: number, clientY: number, frame?: HTMLElement | null) {
+  const gazeFrame = frame ?? document.querySelector<HTMLElement>(".kora-hero-visual .kora-face-frame");
+  if (!gazeFrame) {
+    return {
+      x: clamp((clientX / Math.max(window.innerWidth, 1) - 0.5) * 26, -13, 13),
+      y: clamp((clientY / Math.max(window.innerHeight, 1) - 0.5) * 20, -10, 10),
+    };
+  }
+
+  const bounds = gazeFrame.getBoundingClientRect();
+  return {
+    x: clamp(((clientX - bounds.left) / Math.max(bounds.width, 1) - 0.5) * 26, -13, 13),
+    y: clamp(((clientY - bounds.top) / Math.max(bounds.height, 1) - 0.5) * 20, -10, 10),
+  };
+}
+
 const leadTiers = [
   {
     id: "tier-1",
@@ -151,9 +169,7 @@ export default function HomeExperience() {
 
   useEffect(() => {
     const updateFromViewport = (clientX: number, clientY: number) => {
-      const x = Math.max(-13, Math.min(13, (clientX / Math.max(window.innerWidth, 1) - 0.5) * 26));
-      const y = Math.max(-10, Math.min(10, (clientY / Math.max(window.innerHeight, 1) - 0.5) * 20));
-      gazeTarget.current = { x, y };
+      gazeTarget.current = gazeForPointer(clientX, clientY);
       lastPointerAt.current = Date.now();
       const expressionIndex = Math.min(
         Math.floor((clientX / Math.max(window.innerWidth, 1)) * features.length),
@@ -202,10 +218,7 @@ export default function HomeExperience() {
 
   function followPointer(event: PointerEvent<HTMLDivElement>) {
     if (event.pointerType === "touch") return;
-    gazeTarget.current = {
-      x: Math.max(-13, Math.min(13, (event.clientX / Math.max(window.innerWidth, 1) - 0.5) * 26)),
-      y: Math.max(-10, Math.min(10, (event.clientY / Math.max(window.innerHeight, 1) - 0.5) * 20)),
-    };
+    gazeTarget.current = gazeForPointer(event.clientX, event.clientY, event.currentTarget);
     lastPointerAt.current = Date.now();
     const expressionIndex = Math.min(
       Math.floor((event.clientX / Math.max(window.innerWidth, 1)) * features.length),
