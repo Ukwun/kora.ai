@@ -5,17 +5,19 @@ import { createElement, useEffect, useRef, useState } from "react";
 type ModelNode = {
   name: string;
   visible: boolean;
-  rotation?: { x: number; y: number };
+  rotation?: { x: number; y: number; z: number };
   morphTargetInfluences?: number[];
   morphTargetDictionary?: Record<string, number>;
 };
 
 type ModelScene = {
   traverse: (callback: (object: ModelNode) => void) => void;
+  queueRender: () => void;
 };
 
 type Expression = "people" | "work" | "money" | "signals" | "team";
 type HeadNode = { node: ModelNode; factor: number; baseX: number; baseY: number };
+type BodyNode = { node: ModelNode; factor: number; baseX: number; baseZ: number };
 
 type ModelViewerElement = HTMLElement & {
   model?: object | null;
@@ -34,25 +36,27 @@ function getModelScene(element: ModelViewerElement) {
 
 function applyModelPose(
   headNodes: HeadNode[],
+  bodyNodes: BodyNode[],
   faceNodes: ModelNode[],
   gaze: { x: number; y: number },
   blinking: boolean,
   expression: Expression,
   reducedMotion: boolean,
+  timestamp: number,
 ) {
   const expressions = {
-    people: { smile: 0.72, mouth: 0.02, eyes: 1 },
-    work: { smile: 0.08, mouth: 0.72, eyes: 0.88 },
-    money: { smile: 0.5, mouth: 0.28, eyes: 0.94 },
-    signals: { smile: 0.04, mouth: 0.48, eyes: 1 },
-    team: { smile: 0.92, mouth: 0.12, eyes: 0.96 },
+    people: { smile: 0.85, mouth: 0.02, eyes: 1 },
+    work: { smile: 0.03, mouth: 0.88, eyes: 0.76 },
+    money: { smile: 0.55, mouth: 0.58, eyes: 0.88 },
+    signals: { smile: 0.02, mouth: 0.72, eyes: 1 },
+    team: { smile: 1, mouth: 0.08, eyes: 0.94 },
   } as const;
   const face = expressions[expression];
   const setMorph = (node: ModelNode, target: string, value: number) => {
     const index = node.morphTargetDictionary?.[target];
     const influences = node.morphTargetInfluences;
     if (typeof index === "number" && influences) {
-      influences[index] += (Math.max(0, Math.min(1, value)) - influences[index]) * (reducedMotion ? 1 : 0.12);
+      influences[index] += (Math.max(0, Math.min(1, value)) - influences[index]) * (reducedMotion ? 1 : 0.22);
     }
   };
   faceNodes.forEach((node) => {
@@ -67,6 +71,14 @@ function applyModelPose(
     node.rotation.y = baseY + gaze.x * 0.04 * factor;
     node.rotation.x = baseX - gaze.y * 0.025 * factor;
   });
+  if (!reducedMotion) {
+    const breath = Math.sin(timestamp / 1500);
+    bodyNodes.forEach(({ node, factor, baseX, baseZ }) => {
+      if (!node.rotation) return;
+      node.rotation.x = baseX + breath * 0.018 * factor;
+      node.rotation.z = baseZ + Math.sin(timestamp / 2400 + factor) * 0.012 * factor;
+    });
+  }
 }
 
 export default function KoraModel({ gaze, blinking, expression, priority = false, cameraOrbit = "0deg 75deg 20%" }: { gaze: { x: number; y: number }; blinking: boolean; expression: Expression; priority?: boolean; cameraOrbit?: string }) {
@@ -80,6 +92,7 @@ export default function KoraModel({ gaze, blinking, expression, priority = false
   const [retryNonce, setRetryNonce] = useState(0);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const headNodesRef = useRef<{ node: ModelNode; factor: number; baseX: number; baseY: number }[]>([]);
+  const bodyNodesRef = useRef<BodyNode[]>([]);
   const faceNodesRef = useRef<ModelNode[]>([]);
   const gazeRef = useRef(gaze);
   const blinkingRef = useRef(blinking);
@@ -178,6 +191,7 @@ export default function KoraModel({ gaze, blinking, expression, priority = false
       }
 
       const headNodes: { node: ModelNode; factor: number; baseX: number; baseY: number }[] = [];
+      const bodyNodes: BodyNode[] = [];
       const faceNodes: ModelNode[] = [];
       let skirtFound = false;
       scene.traverse((object) => {
@@ -194,6 +208,14 @@ export default function KoraModel({ gaze, blinking, expression, priority = false
             baseY: object.rotation.y,
           });
         }
+        if (object.rotation && /spine\d*$/.test(name)) {
+          bodyNodes.push({
+            node: object,
+            factor: name.endsWith("spine") ? 1 : 0.65,
+            baseX: object.rotation.x,
+            baseZ: object.rotation.z,
+          });
+        }
         if (object.morphTargetDictionary && object.morphTargetInfluences) faceNodes.push(object);
       });
 
@@ -205,6 +227,7 @@ export default function KoraModel({ gaze, blinking, expression, priority = false
 
       initialized = true;
       headNodesRef.current = headNodes;
+      bodyNodesRef.current = bodyNodes;
       faceNodesRef.current = faceNodes;
       setPoseReady(false);
       setModelLoaded(true);
@@ -213,6 +236,7 @@ export default function KoraModel({ gaze, blinking, expression, priority = false
     const handleError = () => {
       console.error("Kora's 3D model failed to load.");
       headNodesRef.current = [];
+      bodyNodesRef.current = [];
       faceNodesRef.current = [];
       setPoseReady(false);
       setModelLoaded(false);
@@ -225,6 +249,7 @@ export default function KoraModel({ gaze, blinking, expression, priority = false
       if (!modelLoaded) {
         console.error("Kora's 3D model timed out.");
         headNodesRef.current = [];
+        bodyNodesRef.current = [];
         faceNodesRef.current = [];
         setFailed(true);
       }
@@ -255,9 +280,22 @@ export default function KoraModel({ gaze, blinking, expression, priority = false
 
   useEffect(() => {
     if (!ready || !modelLoaded || !poseReady || !inView || reducedMotion) return;
+    const element = containerRef.current?.querySelector("[data-kora-model]") as ModelViewerElement | null;
+    const scene = element ? getModelScene(element) : undefined;
+    if (!scene) return;
     let frame = 0;
-    const animateFace = () => {
-      applyModelPose(headNodesRef.current, faceNodesRef.current, gazeRef.current, blinkingRef.current, expressionRef.current, false);
+    const animateFace = (timestamp: number) => {
+      applyModelPose(
+        headNodesRef.current,
+        bodyNodesRef.current,
+        faceNodesRef.current,
+        gazeRef.current,
+        blinkingRef.current,
+        expressionRef.current,
+        false,
+        timestamp,
+      );
+      scene.queueRender();
       frame = window.requestAnimationFrame(animateFace);
     };
     frame = window.requestAnimationFrame(animateFace);
@@ -268,7 +306,9 @@ export default function KoraModel({ gaze, blinking, expression, priority = false
 
   useEffect(() => {
     if (!ready || !modelLoaded || !poseReady || !inView || !reducedMotion) return;
-    applyModelPose(headNodesRef.current, faceNodesRef.current, gaze, blinking, expression, true);
+    applyModelPose(headNodesRef.current, bodyNodesRef.current, faceNodesRef.current, gaze, blinking, expression, true, 0);
+    const element = containerRef.current?.querySelector("[data-kora-model]") as ModelViewerElement | null;
+    if (element) getModelScene(element)?.queueRender();
   }, [ready, reducedMotion, modelLoaded, poseReady, inView, gaze, blinking, expression]);
 
   const retryModel = () => {
@@ -276,6 +316,7 @@ export default function KoraModel({ gaze, blinking, expression, priority = false
     setModelLoaded(false);
     setPoseReady(false);
     headNodesRef.current = [];
+    bodyNodesRef.current = [];
     faceNodesRef.current = [];
     setRetryNonce((value) => value + 1);
   };
