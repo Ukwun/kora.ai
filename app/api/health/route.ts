@@ -25,6 +25,7 @@ export async function GET() {
   const emailConfigured = isTransactionalEmailConfigured();
   const providers = {
     email: { configured: emailConfigured },
+    ai: { configured: Boolean(process.env.OPENAI_API_KEY) },
     google: { configured: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) },
     facebook: { configured: Boolean(process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET) },
     payments: { configured: Boolean(process.env.PAYSTACK_PUBLIC_KEY && process.env.PAYSTACK_SECRET_KEY && process.env.PAYMENT_WEBHOOK_SECRET) },

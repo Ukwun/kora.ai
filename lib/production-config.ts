@@ -13,6 +13,7 @@ export function getProductionConfigurationIssues() {
     "UPSTASH_REDIS_REST_URL",
     "UPSTASH_REDIS_REST_TOKEN",
     "FIREBASE_PROJECT_ID",
+    "OPENAI_API_KEY",
   ];
 
   for (const key of required) {
