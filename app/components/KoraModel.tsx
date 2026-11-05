@@ -1,6 +1,6 @@
 "use client";
 
-import { createElement, useEffect, useRef, useState, type ReactNode } from "react";
+import { createElement, useEffect, useRef, useState } from "react";
 
 type ModelNode = {
   name: string;
@@ -14,6 +14,9 @@ type ModelScene = {
   traverse: (callback: (object: ModelNode) => void) => void;
 };
 
+type Expression = "people" | "work" | "money" | "signals" | "team";
+type HeadNode = { node: ModelNode; factor: number; baseX: number; baseY: number };
+
 type ModelViewerElement = HTMLElement & {
   model?: object | null;
   autoplay: boolean;
@@ -22,16 +25,56 @@ type ModelViewerElement = HTMLElement & {
 };
 
 function getModelScene(element: ModelViewerElement) {
+  const publicScene = (element.model as { scene?: ModelScene } | null | undefined)?.scene;
+  if (publicScene) return publicScene;
   // model-viewer 4.1 keeps its Three.js scene on a symbol rather than a public property.
   const sceneSymbol = Object.getOwnPropertySymbols(element).find((symbol) => symbol.description === "scene");
   return sceneSymbol ? element[sceneSymbol] : undefined;
 }
 
-export default function KoraModel({ gaze, blinking, expression, fallback, priority = false }: { gaze: { x: number; y: number }; blinking: boolean; expression: "people" | "work" | "money" | "signals" | "team"; fallback: ReactNode; priority?: boolean }) {
+function applyModelPose(
+  headNodes: HeadNode[],
+  faceNodes: ModelNode[],
+  gaze: { x: number; y: number },
+  blinking: boolean,
+  expression: Expression,
+  reducedMotion: boolean,
+) {
+  const expressions = {
+    people: { smile: 0.72, mouth: 0.02, eyes: 1 },
+    work: { smile: 0.08, mouth: 0.72, eyes: 0.88 },
+    money: { smile: 0.5, mouth: 0.28, eyes: 0.94 },
+    signals: { smile: 0.04, mouth: 0.48, eyes: 1 },
+    team: { smile: 0.92, mouth: 0.12, eyes: 0.96 },
+  } as const;
+  const face = expressions[expression];
+  const setMorph = (node: ModelNode, target: string, value: number) => {
+    const index = node.morphTargetDictionary?.[target];
+    const influences = node.morphTargetInfluences;
+    if (typeof index === "number" && influences) {
+      influences[index] += (Math.max(0, Math.min(1, value)) - influences[index]) * (reducedMotion ? 1 : 0.12);
+    }
+  };
+  faceNodes.forEach((node) => {
+    setMorph(node, "eyeopenr", blinking ? 0 : face.eyes);
+    setMorph(node, "eyeopenel", blinking ? 0 : face.eyes);
+    setMorph(node, "smilel", face.smile);
+    setMorph(node, "smiler", face.smile);
+    setMorph(node, "mouthopen", face.mouth);
+  });
+  headNodes.forEach(({ node, factor, baseX, baseY }) => {
+    if (!node.rotation) return;
+    node.rotation.y = baseY + gaze.x * 0.04 * factor;
+    node.rotation.x = baseX - gaze.y * 0.025 * factor;
+  });
+}
+
+export default function KoraModel({ gaze, blinking, expression, priority = false, cameraOrbit = "0deg 75deg 20%" }: { gaze: { x: number; y: number }; blinking: boolean; expression: Expression; priority?: boolean; cameraOrbit?: string }) {
   const [ready, setReady] = useState(false);
   const [modelLoaded, setModelLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
   const [visible, setVisible] = useState(priority);
+  const [inView, setInView] = useState(priority);
   const [reducedMotion, setReducedMotion] = useState(false);
   const [poseReady, setPoseReady] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
@@ -50,7 +93,9 @@ export default function KoraModel({ gaze, blinking, expression, fallback, priori
 
   useEffect(() => {
     const observer = new IntersectionObserver(([entry]) => {
-      if (entry?.isIntersecting) setVisible(true);
+      const isIntersecting = entry?.isIntersecting ?? false;
+      if (isIntersecting) setVisible(true);
+      setInView(isIntersecting);
     }, { rootMargin: "240px 0px", threshold: 0.01 });
     if (containerRef.current) observer.observe(containerRef.current);
     const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -108,7 +153,7 @@ export default function KoraModel({ gaze, blinking, expression, fallback, priori
       if (initialized) return;
       const scene = getModelScene(element);
       if (!scene) {
-        console.error("Kora's 3D scene is unavailable; showing the illustrated fallback.");
+        console.error("Kora's 3D scene is unavailable.");
         setFailed(true);
         return;
       }
@@ -134,7 +179,7 @@ export default function KoraModel({ gaze, blinking, expression, fallback, priori
       });
 
       if (!skirtFound) {
-        console.error("Kora's detached skirt mesh could not be hidden; showing the illustrated fallback.");
+        console.error("Kora's detached skirt mesh could not be hidden.");
         setFailed(true);
         return;
       }
@@ -147,7 +192,7 @@ export default function KoraModel({ gaze, blinking, expression, fallback, priori
       setFailed(false);
     };
     const handleError = () => {
-      console.error("Kora's 3D model failed to load; showing the illustrated fallback.");
+      console.error("Kora's 3D model failed to load.");
       headNodesRef.current = [];
       faceNodesRef.current = [];
       setPoseReady(false);
@@ -159,7 +204,7 @@ export default function KoraModel({ gaze, blinking, expression, fallback, priori
     if (element.model) queueMicrotask(handleLoad);
     const timeout = window.setTimeout(() => {
       if (!modelLoaded) {
-        console.error("Kora's 3D model timed out; showing the illustrated fallback.");
+        console.error("Kora's 3D model timed out.");
         headNodesRef.current = [];
         faceNodesRef.current = [];
         setFailed(true);
@@ -190,39 +235,22 @@ export default function KoraModel({ gaze, blinking, expression, fallback, priori
   }, [modelLoaded, poseReady, reducedMotion]);
 
   useEffect(() => {
-    if (!ready || !modelLoaded || !poseReady || reducedMotion) return;
+    if (!ready || !modelLoaded || !poseReady || !inView || reducedMotion) return;
     let frame = 0;
     const animateFace = () => {
-      const currentGaze = gazeRef.current;
-      const mood = expressionRef.current;
-
-      headNodesRef.current.forEach(({ node, factor, baseX, baseY }) => {
-        if (!node.rotation) return;
-        node.rotation.y = baseY + currentGaze.x * 0.012 * factor;
-        node.rotation.x = baseX - currentGaze.y * 0.008 * factor;
-      });
-
-      const setMorph = (node: ModelNode, target: string, value: number) => {
-        const index = node.morphTargetDictionary?.[target];
-        const influences = node.morphTargetInfluences;
-        if (typeof index === "number" && influences) influences[index] = Math.max(0, Math.min(1, value));
-      };
-      const smile = mood === "people" || mood === "team" ? 0.28 : mood === "signals" ? 0.12 : 0.05;
-      faceNodesRef.current.forEach((node) => {
-        setMorph(node, "eyeopenr", blinkingRef.current ? 0 : 1);
-        setMorph(node, "eyeopenel", blinkingRef.current ? 0 : 1);
-        setMorph(node, "smilel", smile);
-        setMorph(node, "smiler", smile);
-        setMorph(node, "mouthopen", mood === "work" || mood === "money" ? 0.08 : 0);
-      });
-
+      applyModelPose(headNodesRef.current, faceNodesRef.current, gazeRef.current, blinkingRef.current, expressionRef.current, false);
       frame = window.requestAnimationFrame(animateFace);
     };
     frame = window.requestAnimationFrame(animateFace);
     return () => {
       window.cancelAnimationFrame(frame);
     };
-  }, [ready, reducedMotion, modelLoaded, poseReady]);
+  }, [ready, reducedMotion, modelLoaded, poseReady, inView]);
+
+  useEffect(() => {
+    if (!ready || !modelLoaded || !poseReady || !inView || !reducedMotion) return;
+    applyModelPose(headNodesRef.current, faceNodesRef.current, gaze, blinking, expression, true);
+  }, [ready, reducedMotion, modelLoaded, poseReady, inView, gaze, blinking, expression]);
 
   const retryModel = () => {
     setFailed(false);
@@ -241,8 +269,8 @@ export default function KoraModel({ gaze, blinking, expression, fallback, priori
     loading: "eager",
     autoplay: true,
     "animation-name": "Armaturecorpo.001|Armaturecorpo.001|Armature|mixamo.com|Layer0",
-    "camera-target": "39m 93m -2m",
-    "camera-orbit": "0deg 75deg 20%",
+    "camera-target": "-12.4m 32.7m 0.3m",
+    "camera-orbit": cameraOrbit,
     "field-of-view": "30deg",
     "min-camera-orbit": "auto auto 0m",
     cameraControls: false,
@@ -260,7 +288,7 @@ export default function KoraModel({ gaze, blinking, expression, fallback, priori
       className={`absolute inset-0 transition-opacity duration-500 ${modelLoaded ? "pointer-events-none opacity-0" : "opacity-100"}`}
       aria-hidden={modelLoaded}
     >
-      {fallback}
+      <div className="kora-model-loading" />
     </div>
     {visible && !modelLoaded && !failed && (
       <div className="pointer-events-none absolute inset-x-0 bottom-5 flex justify-center text-violet-100/70">
@@ -269,7 +297,7 @@ export default function KoraModel({ gaze, blinking, expression, fallback, priori
     )}
     {failed && (
       <div className="absolute inset-x-0 bottom-4 flex flex-col items-center gap-2 text-center">
-        <p role="status" className="text-xs text-slate-300">3D preview unavailable. Showing Kora’s illustration.</p>
+        <p role="status" className="text-xs text-slate-300">Kora’s 3D model couldn’t load.</p>
         <button type="button" onClick={retryModel} className="rounded-lg border border-white/15 px-3 py-2 text-xs text-slate-200 transition hover:border-violet-300/40">
           Retry 3D preview
         </button>

@@ -5,7 +5,7 @@ import { getSessionFromRequest } from "@/lib/session";
 import { canPerformAction } from "@/lib/security";
 
 const schema = z.object({
-  package: z.enum(["pilot", "steady", "scale"]),
+  package: z.enum(["tier-1", "tier-2", "tier-3"]),
   country: z.string().trim().min(2).max(80),
   region: z.string().trim().max(100).optional(),
   jobTitles: z.array(z.string().trim().min(2).max(80)).min(1).max(10),
@@ -26,9 +26,9 @@ const schema = z.object({
 });
 
 const packageDetails = {
-  pilot: { label: "Pilot", requestedMonthlyVolume: 25 },
-  steady: { label: "Steady growth", requestedMonthlyVolume: 100 },
-  scale: { label: "Scale", requestedMonthlyVolume: 250 },
+  "tier-1": { label: "Tier 1", requestedMonthlyVolume: 25 },
+  "tier-2": { label: "Tier 2", requestedMonthlyVolume: 50 },
+  "tier-3": { label: "Tier 3", requestedMonthlyVolume: 100 },
 } as const;
 
 export async function GET(request: NextRequest) {

@@ -53,122 +53,45 @@ const features = [
 ] as const;
 
 type FeatureId = (typeof features)[number]["id"];
-const expressionCycle: readonly FeatureId[] = ["people", "signals", "work", "team"];
-
-function RobotFace({
-  idPrefix,
-  activeFeature,
-  blinking,
-  gaze,
-}: {
-  idPrefix: string;
-  activeFeature: FeatureId;
-  blinking: boolean;
-  gaze: { x: number; y: number };
-}) {
-  return (
-    <svg
-      className="kora-robot-face"
-      viewBox="0 0 560 640"
-      role="img"
-      aria-label="Kora, an abstract synthetic intelligence with softly glowing violet eyes"
-    >
-      <defs>
-        <linearGradient id={`${idPrefix}-shell`} x1="0.13" y1="0.05" x2="0.9" y2="1">
-          <stop offset="0" stopColor="#38344a" />
-          <stop offset="0.38" stopColor="#171622" />
-          <stop offset="0.78" stopColor="#0a0a11" />
-          <stop offset="1" stopColor="#40364f" />
-        </linearGradient>
-        <linearGradient id={`${idPrefix}-face`} x1="0" y1="0" x2="0.9" y2="1">
-          <stop offset="0" stopColor="#262332" />
-          <stop offset="0.52" stopColor="#11111a" />
-          <stop offset="1" stopColor="#1d1828" />
-        </linearGradient>
-        <linearGradient id={`${idPrefix}-eye`} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#f1c6ff" />
-          <stop offset="0.45" stopColor="#c76aff" />
-          <stop offset="1" stopColor="#7550ff" />
-        </linearGradient>
-        <linearGradient id={`${idPrefix}-neck`} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#342c43" />
-          <stop offset="0.5" stopColor="#0c0b13" />
-          <stop offset="1" stopColor="#4a3157" />
-        </linearGradient>
-        <radialGradient id={`${idPrefix}-faceGlow`} cx="50%" cy="43%" r="57%">
-          <stop offset="0" stopColor="#b044ff" stopOpacity=".22" />
-          <stop offset="1" stopColor="#b044ff" stopOpacity="0" />
-        </radialGradient>
-        <filter id={`${idPrefix}-violetGlow`} x="-150%" y="-150%" width="400%" height="400%">
-          <feGaussianBlur stdDeviation="8" result="blur" />
-          <feMerge>
-            <feMergeNode in="blur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-        <clipPath id={`${idPrefix}-leftEye`}>
-          <path d="M151 277 Q193 243 235 276 Q197 306 151 277Z" />
-        </clipPath>
-        <clipPath id={`${idPrefix}-rightEye`}>
-          <path d="M325 276 Q367 243 409 277 Q363 306 325 276Z" />
-        </clipPath>
-      </defs>
-
-      <ellipse cx="280" cy="570" rx="167" ry="43" fill="#a144ff" opacity=".12" filter={`url(#${idPrefix}-violetGlow)`} />
-      <path d="M188 477 Q198 535 151 581 Q280 641 409 581 Q362 535 372 477Z" fill={`url(#${idPrefix}-neck)`} stroke="#6d4d83" strokeOpacity=".45" />
-      <path d="M150 555 Q280 512 410 555 Q467 574 480 627 L80 627 Q93 574 150 555Z" fill={`url(#${idPrefix}-shell)`} stroke="#8b63a1" strokeOpacity=".38" />
-      <path d="M131 202 Q128 87 280 64 Q432 87 429 202 L417 382 Q404 486 280 514 Q156 486 143 382Z" fill={`url(#${idPrefix}-shell)`} stroke="#9075a4" strokeOpacity=".57" strokeWidth="1.5" />
-      <path d="M145 204 Q160 106 280 91 Q400 106 415 204 L402 366 Q390 449 280 478 Q170 449 158 366Z" fill={`url(#${idPrefix}-face)`} />
-      <path d="M145 205 Q191 107 280 94 Q369 107 415 205 Q388 173 357 166 Q283 143 203 168 Q170 179 145 205Z" fill="#0b0b12" />
-      <ellipse cx="280" cy="290" rx="138" ry="173" fill={`url(#${idPrefix}-faceGlow)`} />
-
-      <path d="M134 222 Q108 236 117 300 Q123 340 149 349 L151 265Z" fill="#171420" stroke="#9968bb" strokeOpacity=".65" />
-      <path d="M426 222 Q452 236 443 300 Q437 340 411 349 L409 265Z" fill="#171420" stroke="#9968bb" strokeOpacity=".65" />
-      <path d="M123 264 Q135 249 148 264 M437 264 Q425 249 412 264" fill="none" stroke="#d39aff" strokeOpacity=".75" strokeWidth="2" />
-      <circle cx="132" cy="292" r="4" fill="#d590ff" filter={`url(#${idPrefix}-violetGlow)`} />
-      <circle cx="428" cy="292" r="4" fill="#d590ff" filter={`url(#${idPrefix}-violetGlow)`} />
-
-      <path d="M151 277 Q193 243 235 276 Q197 306 151 277Z" fill="#07070c" stroke="#8b6aa0" strokeWidth="2" />
-      <path d="M325 276 Q367 243 409 277 Q363 306 325 276Z" fill="#07070c" stroke="#8b6aa0" strokeWidth="2" />
-      <g clipPath={`url(#${idPrefix}-leftEye)`}>
-        <circle cx={193 + gaze.x} cy={276 + gaze.y} r="18" fill={`url(#${idPrefix}-eye)`} filter={`url(#${idPrefix}-violetGlow)`} />
-        <circle cx={193 + gaze.x} cy={276 + gaze.y} r="7" fill="#090810" />
-        <circle cx={187 + gaze.x} cy={269 + gaze.y} r="3.4" fill="#fff" opacity=".92" />
-        <path className={blinking ? "kora-eye-lid kora-eye-lid-closed" : "kora-eye-lid"} d="M150 243 Q193 230 237 247 L237 281 Q196 296 150 281Z" />
-      </g>
-      <g clipPath={`url(#${idPrefix}-rightEye)`}>
-        <circle cx={367 + gaze.x} cy={276 + gaze.y} r="18" fill={`url(#${idPrefix}-eye)`} filter={`url(#${idPrefix}-violetGlow)`} />
-        <circle cx={367 + gaze.x} cy={276 + gaze.y} r="7" fill="#090810" />
-        <circle cx={361 + gaze.x} cy={269 + gaze.y} r="3.4" fill="#fff" opacity=".92" />
-        <path className={blinking ? "kora-eye-lid kora-eye-lid-closed" : "kora-eye-lid"} d="M323 243 Q367 230 411 247 L411 281 Q370 296 323 281Z" />
-      </g>
-      <path d="M151 277 Q193 243 235 276 M325 276 Q367 243 409 277" fill="none" stroke="#d5a7eb" strokeOpacity=".8" strokeWidth="2" />
-
-      <path d="M280 282 Q274 322 264 354 Q278 366 296 354" fill="none" stroke="#87778f" strokeOpacity=".68" strokeWidth="2" />
-      <path className="kora-face-mouth" d="M238 403 Q280 417 322 403" fill="none" stroke="#c481dd" strokeOpacity=".82" strokeWidth="2.5" />
-      <path d="M252 404 Q280 410 308 404" fill="none" stroke="#a448d5" strokeOpacity=".5" />
-
-      <path d="M164 330 L192 340 L205 358 M396 330 L368 340 L355 358" fill="none" stroke="#8d64a5" strokeOpacity=".47" />
-      <path d="M161 348 L180 353 M399 348 L380 353" stroke="#d298ef" strokeOpacity=".63" strokeWidth="2" />
-      <path d="M149 187 Q280 120 411 187" fill="none" stroke="#e0b5f4" strokeOpacity=".48" />
-      <path d="M177 457 Q280 493 383 457" fill="none" stroke="#bd7bdb" strokeOpacity=".32" />
-      <path d="M229 115 Q280 99 331 115" fill="none" stroke="#9f78b7" strokeOpacity=".65" strokeWidth="2" />
-      <circle cx="280" cy="113" r="3" fill="#d7a0ff" filter={`url(#${idPrefix}-violetGlow)`} />
-      <path d="M92 417 Q112 399 135 397 M468 417 Q448 399 425 397" fill="none" stroke="#ac70d0" strokeOpacity=".55" />
-
-      <g className={`kora-face-signal kora-face-signal-${activeFeature}`} fill="none" stroke="#bd80f0" strokeWidth="1.5">
-        <path d="M107 211 H83 V181 H65" />
-        <path d="M453 211 H477 V181 H495" />
-        <circle cx="65" cy="181" r="3" fill="#e1b7ff" />
-        <circle cx="495" cy="181" r="3" fill="#e1b7ff" />
-      </g>
-    </svg>
-  );
-}
+const leadMarkets = ["Africa", "UK & Europe", "China & Japan", "US & Canada", "Australia"] as const;
+const leadChannels = ["Email delivery", "Email strategy", "Cold DM strategy", "WhatsApp", "Campaign ads"] as const;
+const leadTiers = [
+  {
+    id: "tier-1",
+    name: "Tier 1",
+    price: "₦15,000",
+    volume: "25 leads / month",
+    description: "A focused starting list of prospective customers for your business.",
+    includes: ["Names and professional titles", "Email addresses and phone numbers", "Prospect list prepared for your business email"],
+  },
+  {
+    id: "tier-2",
+    name: "Tier 2",
+    price: "₦75,000",
+    volume: "50 leads / month",
+    description: "More context plus a one-day campaign built to start conversations.",
+    includes: ["Emails, phone numbers, company names and websites", "One-day audience-targeted ad campaign", "Prospective customers directed to your WhatsApp DMs after connection and consent"],
+  },
+  {
+    id: "tier-3",
+    name: "Tier 3",
+    price: "₦120,000",
+    volume: "Up to 100 leads / month",
+    description: "A richer professional audience with tailored email copy and a longer campaign.",
+    includes: [
+      "Professional emails, phone numbers, LinkedIn URLs and business social handles where lawfully available",
+      "Company names and websites, plus professional employee and employer names",
+      "Personalized first-touch and follow-up email copy for each lead",
+      "Three-day audience-targeted ad campaign",
+    ],
+  },
+] as const;
 
 export default function HomeExperience() {
   const [activeFeature, setActiveFeature] = useState<FeatureId>("people");
   const [ambientExpression, setAmbientExpression] = useState<FeatureId>("people");
+  const [selectedMarket, setSelectedMarket] = useState<(typeof leadMarkets)[number]>("Africa");
+  const [selectedChannels, setSelectedChannels] = useState<(typeof leadChannels)[number][]>(["Email strategy"]);
   const [gaze, setGaze] = useState({ x: 0, y: 0 });
   const [blinking, setBlinking] = useState(false);
   const gazeTarget = useRef({ x: 0, y: 0 });
@@ -200,16 +123,6 @@ export default function HomeExperience() {
   }, []);
 
   useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    let index = 0;
-    const expressionTimer = window.setInterval(() => {
-      index = (index + 1) % expressionCycle.length;
-      setAmbientExpression(expressionCycle[index]);
-    }, 5200);
-    return () => window.clearInterval(expressionTimer);
-  }, []);
-
-  useEffect(() => {
     let animationFrame = 0;
     let disposed = false;
     let lastUpdate = 0;
@@ -220,10 +133,10 @@ export default function HomeExperience() {
         lastUpdate = timestamp;
         setGaze((current) => {
           const next = {
-            x: current.x + (gazeTarget.current.x - current.x) * 0.16,
-            y: current.y + (gazeTarget.current.y - current.y) * 0.16,
+            x: current.x + (gazeTarget.current.x - current.x) * 0.3,
+            y: current.y + (gazeTarget.current.y - current.y) * 0.3,
           };
-          return Math.abs(next.x - current.x) < 0.02 && Math.abs(next.y - current.y) < 0.02 ? gazeTarget.current : next;
+          return Math.abs(next.x - current.x) < 0.005 && Math.abs(next.y - current.y) < 0.005 ? gazeTarget.current : next;
         });
       }
       animationFrame = window.requestAnimationFrame(animateGaze);
@@ -242,6 +155,11 @@ export default function HomeExperience() {
       const y = Math.max(-10, Math.min(10, (clientY / Math.max(window.innerHeight, 1) - 0.5) * 20));
       gazeTarget.current = { x, y };
       lastPointerAt.current = Date.now();
+      const expressionIndex = Math.min(
+        Math.floor((clientX / Math.max(window.innerWidth, 1)) * features.length),
+        features.length - 1,
+      );
+      setAmbientExpression(features[expressionIndex].id);
     };
     const handlePointerMove = (event: globalThis.PointerEvent) => {
       if (event.pointerType !== "touch") updateFromViewport(event.clientX, event.clientY);
@@ -250,6 +168,7 @@ export default function HomeExperience() {
       if (Date.now() - lastPointerAt.current < 3500) return;
       const time = Date.now() / 1100;
       gazeTarget.current = { x: Math.sin(time) * 3.2, y: Math.cos(time * 0.8) * 2.2 };
+      setAmbientExpression(features[Math.floor(Date.now() / 5200) % features.length].id);
     }, 1200);
 
     window.addEventListener("pointermove", handlePointerMove, { passive: true });
@@ -269,6 +188,7 @@ export default function HomeExperience() {
             const feature = entry.target.dataset.koraFeature;
             if (features.some((item) => item.id === feature)) {
               setActiveFeature(feature as FeatureId);
+              setAmbientExpression(feature as FeatureId);
             }
           }
         }
@@ -287,6 +207,19 @@ export default function HomeExperience() {
       y: Math.max(-10, Math.min(10, (event.clientY / Math.max(window.innerHeight, 1) - 0.5) * 20)),
     };
     lastPointerAt.current = Date.now();
+    const expressionIndex = Math.min(
+      Math.floor((event.clientX / Math.max(window.innerWidth, 1)) * features.length),
+      features.length - 1,
+    );
+    setAmbientExpression(features[expressionIndex].id);
+  }
+
+  function toggleLeadChannel(channel: (typeof leadChannels)[number]) {
+    setSelectedChannels((current) =>
+      current.includes(channel)
+        ? current.filter((item) => item !== channel)
+        : [...current, channel],
+    );
   }
 
   return (
@@ -299,6 +232,7 @@ export default function HomeExperience() {
           </Link>
           <div className="kora-nav-links">
             <a href="#capabilities">Capabilities</a>
+            <a href="#lead-growth">Find customers</a>
             <a href="#how-it-works">How it works</a>
             <a href="#trust">Built for real work</a>
           </div>
@@ -319,6 +253,7 @@ export default function HomeExperience() {
             <summary aria-label="Toggle navigation menu"><span /><span /></summary>
             <div className="kora-mobile-menu-panel">
               <a href="#capabilities">Capabilities</a>
+              <a href="#lead-growth">Find customers</a>
               <a href="#how-it-works">How it works</a>
               <a href="#trust">Built for real work</a>
               <Link href="/auth?mode=signin">Sign in</Link>
@@ -346,7 +281,6 @@ export default function HomeExperience() {
               gaze={gaze}
               blinking={blinking}
               expression={ambientExpression}
-              fallback={<RobotFace idPrefix="kora-hero" activeFeature={ambientExpression} blinking={blinking} gaze={gaze} />}
               priority
             />
             <span className="kora-face-corner kora-face-corner-tl" />
@@ -399,7 +333,12 @@ export default function HomeExperience() {
             data-mode={activeFeature}
             onPointerMove={followPointer}
           >
-            <RobotFace idPrefix="kora-story" activeFeature={ambientExpression} blinking={blinking} gaze={gaze} />
+            <KoraModel
+              gaze={gaze}
+              blinking={blinking}
+              expression={ambientExpression}
+              cameraOrbit="0deg 75deg 14%"
+            />
           </div>
           <div className="kora-story-caption" aria-live="polite">
             <span>NOW EXPLORING · {active.number}</span>
@@ -435,6 +374,139 @@ export default function HomeExperience() {
               <p className="kora-feature-signal"><span />{feature.signal}</p>
             </article>
           ))}
+        </div>
+      </section>
+
+      <section className="kora-growth" id="lead-growth" aria-labelledby="growth-title">
+        <div className="kora-growth-heading">
+          <p className="kora-eyebrow"><span className="kora-live-dot" /> GROW WITH THE RIGHT PEOPLE</p>
+          <h2 id="growth-title">Find your next customers—<span>wherever they are.</span></h2>
+          <p>Define the companies, roles, and markets that fit your business. Request a reviewed audience across Africa, Europe, Asia-Pacific, and the Americas—subject to verified local data sources and market rules.</p>
+        </div>
+
+        <div className="kora-growth-panel">
+          <div className="kora-growth-panel-heading">
+            <div>
+              <span className="kora-growth-kicker">YOUR IDEAL CUSTOMER, IN CONTEXT</span>
+              <h3>From audience to thoughtful outreach.</h3>
+            </div>
+            <span className="kora-growth-orbit" aria-hidden="true">K</span>
+          </div>
+
+          <div className="kora-growth-steps">
+            <article>
+              <span className="kora-growth-step-number">01</span>
+              <h4>Choose who you serve</h4>
+              <p>Set target markets, industries, company size, and professional roles around your offer.</p>
+            </article>
+            <article>
+              <span className="kora-growth-step-number">02</span>
+              <h4>Review the right context</h4>
+              <p>Request business context—company, title, public business address, website, and professional email, phone, LinkedIn, or social profile where lawfully available.</p>
+            </article>
+            <article>
+              <span className="kora-growth-step-number">03</span>
+              <h4>Plan a personal approach</h4>
+              <p>Prepare tailored email, direct-message, WhatsApp, or paid-campaign strategies for the channels your business can use.</p>
+            </article>
+          </div>
+
+          <div className="kora-growth-explorer">
+            <div className="kora-growth-controls">
+              <div>
+                <p className="kora-growth-control-label">01 / Choose a market</p>
+                <div className="kora-growth-markets" role="group" aria-label="Choose a target market">
+                  {leadMarkets.map((market) => (
+                    <button
+                      type="button"
+                      key={market}
+                      aria-pressed={selectedMarket === market}
+                      className={selectedMarket === market ? "is-selected" : ""}
+                      onClick={() => setSelectedMarket(market)}
+                    >
+                      {market}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="kora-growth-control-label">02 / Choose your approach</p>
+                <div className="kora-growth-channel-row" role="group" aria-label="Choose outreach planning channels">
+                  {leadChannels.map((channel) => (
+                    <button
+                      type="button"
+                      key={channel}
+                      aria-pressed={selectedChannels.includes(channel)}
+                      className={selectedChannels.includes(channel) ? "is-selected" : ""}
+                      onClick={() => toggleLeadChannel(channel)}
+                    >
+                      <span aria-hidden="true">{selectedChannels.includes(channel) ? "✓" : "+"}</span>
+                      {channel}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <aside className="kora-lead-preview" aria-live="polite">
+              <div className="kora-lead-preview-heading">
+                <div>
+                  <span className="kora-growth-kicker">YOUR LIVE BRIEF · EXAMPLE ONLY</span>
+                  <h4>{selectedMarket} audience</h4>
+                </div>
+                <span className="kora-lead-preview-mark" aria-hidden="true">K</span>
+              </div>
+              <p className="kora-lead-preview-summary">
+                {selectedChannels.length
+                  ? `Plan for ${selectedChannels.join(", ")}.`
+                  : "Select a channel to shape your outreach plan."}
+              </p>
+              <ul aria-label="Potential business lead information">
+                <li><span>01</span><span>Company, industry &amp; professional title</span></li>
+                <li><span>02</span><span>Verified business email or phone, where available</span></li>
+                <li><span>03</span><span>LinkedIn or business social profile, website &amp; public business location</span></li>
+              </ul>
+              <p className="kora-lead-preview-note">Illustrative fields, not real people or live lead data. Contact details require verified sources, lawful use, and regional review.</p>
+            </aside>
+          </div>
+        </div>
+
+        <div className="kora-growth-pricing" aria-labelledby="growth-pricing-title">
+          <div className="kora-growth-pricing-heading">
+            <div>
+              <span className="kora-growth-kicker">LEAD SERVICE · MONTHLY TIERS</span>
+              <h3 id="growth-pricing-title">Choose a starting point for your next customers.</h3>
+            </div>
+            <p>Reach professional audiences around the world. Plan delivery to your business email or a messaging destination, subject to availability, consent and supported connections.</p>
+          </div>
+          <div className="kora-growth-tier-grid">
+            {leadTiers.map((tier) => (
+              <article className={`kora-growth-tier-card${tier.id === "tier-3" ? " is-featured" : ""}`} key={tier.id}>
+                <div className="kora-growth-tier-topline">
+                  <span>{tier.name}</span>
+                  {tier.id !== "tier-1" && <span className="kora-growth-tier-badge">{tier.id === "tier-3" ? "3-DAY CAMPAIGN" : "CAMPAIGN INCLUDED"}</span>}
+                </div>
+                <p className="kora-growth-tier-volume">{tier.volume}</p>
+                <p className="kora-growth-tier-price">{tier.price}<span> / month</span></p>
+                <p className="kora-growth-tier-description">{tier.description}</p>
+                <ul>
+                  {tier.includes.map((item) => <li key={item}><span aria-hidden="true">✓</span>{item}</li>)}
+                </ul>
+                <Link className="kora-growth-tier-action" href="/auth?mode=signup">
+                  Create a workspace <span aria-hidden="true">↗</span>
+                </Link>
+              </article>
+            ))}
+          </div>
+          <p className="kora-growth-tier-note">Lead profile details are subject to verified, lawful sources and regional review. Prices describe the proposed monthly plans; creating a workspace or requesting a review does not charge you or start lead delivery.</p>
+        </div>
+
+        <div className="kora-growth-footer">
+          <p><strong>Responsible by design.</strong> Today, Kora can save a lead-service request for availability and compliance review; it does not yet source or deliver contacts or launch campaigns. Any future fulfilment requires verified sources, appropriate consent, regional review, your approval, and supported provider connections.</p>
+          <div className="kora-growth-actions">
+            <Link className="kora-button" href="/auth?mode=signup">Set up a workspace to request a review <span aria-hidden="true">↗</span></Link>
+            <a className="kora-text-link" href="#how-it-works">See how Kora works <span aria-hidden="true">↓</span></a>
+          </div>
         </div>
       </section>
 
@@ -489,7 +561,7 @@ export default function HomeExperience() {
             <Link href="/" className="kora-brand" aria-label="Kora home"><span className="kora-brand-mark">K</span><span className="kora-brand-name">kora<span>.</span></span></Link>
             <p>Intelligence for the business you’re actually running.</p>
           </div>
-          <div><p className="kora-footer-heading">Explore</p><a href="#capabilities">Capabilities</a><a href="#how-it-works">How it works</a><a href="#trust">Our principles</a></div>
+          <div><p className="kora-footer-heading">Explore</p><a href="#capabilities">Capabilities</a><a href="#lead-growth">Find customers</a><a href="#how-it-works">How it works</a><a href="#trust">Our principles</a></div>
           <div><p className="kora-footer-heading">Your account</p><Link href="/auth?mode=signin">Sign in</Link><Link href="/auth?mode=signup">Create a workspace</Link><Link href="/dashboard">Open dashboard</Link></div>
           <div><p className="kora-footer-heading">Connect</p><a href="mailto:hello@kora.ng">hello@kora.ng</a></div>
         </div>

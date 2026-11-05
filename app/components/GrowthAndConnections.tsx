@@ -35,6 +35,7 @@ export function GrowthAndConnections({ canManage }: { canManage: boolean }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [confirmed, setConfirmed] = useState(false);
+  const [acceptsSubscriptionTerms, setAcceptsSubscriptionTerms] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -109,11 +110,11 @@ export function GrowthAndConnections({ canManage }: { canManage: boolean }) {
     } catch (cause) { setError(cause instanceof Error ? cause.message : "WhatsApp connection is not configured."); setBusy(false); }
   }
 
-  async function requestSubscription(plan: "pilot" | "steady" | "scale") {
-    if (!canManage) return;
+  async function requestSubscription(plan: "tier-1" | "tier-2" | "tier-3") {
+    if (!canManage || !acceptsSubscriptionTerms) return;
     setBusy(true); setError(""); setNotice("");
     try {
-      const response = await fetch("/api/lead-service/subscription", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ plan, acceptsTerms: true }) });
+      const response = await fetch("/api/lead-service/subscription", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ plan, acceptsTerms: acceptsSubscriptionTerms }) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? "The subscription request could not be saved.");
       setNotice(result.message ?? "Subscription request saved.");
@@ -136,7 +137,7 @@ export function GrowthAndConnections({ canManage }: { canManage: boolean }) {
         <form onSubmit={(event) => void requestLeadReview(event)} className="space-y-4">
           <div><h3 className="font-medium">Describe the audience you want to reach</h3><p className="mt-1 text-sm text-slate-400">A team member will need to review availability, lawful sourcing, delivery and pricing before anything is offered.</p></div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <label className="text-sm text-slate-300">Review option<select name="package" defaultValue="pilot" className={fieldClass}><option value="pilot">Pilot · request up to 25 prospects monthly</option><option value="steady">Steady growth · request up to 100 monthly</option><option value="scale">Scale · request up to 250 monthly</option></select></label>
+            <label className="text-sm text-slate-300">Review option<select name="package" defaultValue="tier-1" className={fieldClass}><option value="tier-1">Tier 1 · up to 25 leads monthly · ₦15,000</option><option value="tier-2">Tier 2 · up to 50 leads monthly · ₦75,000</option><option value="tier-3">Tier 3 · up to 100 leads monthly · ₦120,000</option></select></label>
             <label className="text-sm text-slate-300">Country<input name="country" required minLength={2} maxLength={80} placeholder="For example, Ghana" className={fieldClass} /></label>
             <label className="text-sm text-slate-300">State, region or city<input name="region" maxLength={100} placeholder="Optional" className={fieldClass} /></label>
             <label className="text-sm text-slate-300">Company size<select name="companySize" defaultValue="any" className={fieldClass}><option value="any">Any size</option><option value="1-10">1–10 people</option><option value="11-50">11–50 people</option><option value="51-200">51–200 people</option><option value="201+">201+ people</option></select></label>
@@ -149,7 +150,9 @@ export function GrowthAndConnections({ canManage }: { canManage: boolean }) {
           <label className="flex items-start gap-3 text-xs leading-5 text-slate-400"><input name="acceptsReviewTerms" type="checkbox" required className="mt-1 accent-violet-400" /><span>I understand this only requests a review. Kora does not currently source or deliver leads through this form, and there is no charge or active subscription. Any future offer must explain its source, price, terms and opt-out process before I agree.</span></label>
           <button type="submit" disabled={!canManage || busy} className={buttonClass}>{busy ? "Saving request…" : canManage ? "Request availability review" : "Ask a workspace owner to request a review"}</button>
           <p className="text-xs leading-5 text-slate-500">We do not support targeting based on sensitive personal traits such as health, religion, race or political views. Only adult professional audiences are eligible for review.</p>
-          <div className="grid gap-2 sm:grid-cols-3"><button type="button" disabled={!canManage || busy} onClick={() => void requestSubscription("pilot")} className={buttonClass}>Request Pilot subscription</button><button type="button" disabled={!canManage || busy} onClick={() => void requestSubscription("steady")} className={buttonClass}>Request Steady subscription</button><button type="button" disabled={!canManage || busy} onClick={() => void requestSubscription("scale")} className={buttonClass}>Request Scale subscription</button></div>
+          <label className="flex items-start gap-3 text-xs leading-5 text-slate-400"><input type="checkbox" checked={acceptsSubscriptionTerms} onChange={(event) => setAcceptsSubscriptionTerms(event.target.checked)} className="mt-1 accent-violet-400" /><span>I understand this records a subscription request only. No payment, lead delivery, or campaign begins until pricing, lawful sourcing, providers and checkout are approved.</span></label>
+          <div className="grid gap-2 sm:grid-cols-2"><button type="button" disabled={!canManage || busy || !acceptsSubscriptionTerms} onClick={() => void requestSubscription("tier-1")} className={buttonClass}>Request Tier 1 · ₦15,000 / month</button><button type="button" disabled={!canManage || busy || !acceptsSubscriptionTerms} onClick={() => void requestSubscription("tier-2")} className={buttonClass}>Request Tier 2 · ₦75,000 / month</button></div>
+          <button type="button" disabled={!canManage || busy || !acceptsSubscriptionTerms} onClick={() => void requestSubscription("tier-3")} className={`${buttonClass} w-full`}>Request Tier 3 · ₦120,000 / month</button>
         </form>
         <aside className="rounded-xl border border-white/10 bg-black/20 p-4 sm:p-5">
           <h3 className="font-medium">Your review requests</h3>

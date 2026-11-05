@@ -6,12 +6,27 @@ import { createBusinessMemoryRecord, listBusinessMemoryRecords, updateBusinessMe
 import { notifyOrganization } from "@/lib/notifications";
 
 const plans = {
-  pilot: { label: "Pilot", monthlyVolume: 25, monthlyPrice: 25000 },
-  steady: { label: "Steady growth", monthlyVolume: 100, monthlyPrice: 60000 },
-  scale: { label: "Scale", monthlyVolume: 250, monthlyPrice: 125000 },
+  "tier-1": {
+    label: "Tier 1",
+    monthlyVolume: 25,
+    monthlyPrice: 15000,
+    includedFeatures: ["Names", "Professional titles", "Email addresses", "Phone numbers", "Lead list prepared for business email delivery"],
+  },
+  "tier-2": {
+    label: "Tier 2",
+    monthlyVolume: 50,
+    monthlyPrice: 75000,
+    includedFeatures: ["Email addresses", "Phone numbers", "Company names", "Company websites", "One-day audience-targeted ad campaign", "WhatsApp DM destination"],
+  },
+  "tier-3": {
+    label: "Tier 3",
+    monthlyVolume: 100,
+    monthlyPrice: 120000,
+    includedFeatures: ["Professional emails", "Phone numbers", "LinkedIn URLs", "Business social handles", "Company names and websites", "Employee and employer names", "Personalized first-touch and follow-up email copy", "Three-day audience-targeted ad campaign"],
+  },
 } as const;
 
-const createSchema = z.object({ plan: z.enum(["pilot", "steady", "scale"]), acceptsTerms: z.literal(true) });
+const createSchema = z.object({ plan: z.enum(["tier-1", "tier-2", "tier-3"]), acceptsTerms: z.literal(true) });
 const updateSchema = z.object({ id: z.string().min(1), status: z.enum(["approved", "active", "paused", "cancelled", "rejected"]), note: z.string().trim().max(500).optional() });
 
 export async function GET(request: NextRequest) {
@@ -34,7 +49,7 @@ export async function POST(request: NextRequest) {
     entityType: "lead_subscription",
     title: `${plan.label} lead-service subscription request`,
     summary: `Subscription request for up to ${plan.monthlyVolume} prospects per month. No payment or lead delivery has started.`,
-    data: { plan: parsed.data.plan, planLabel: plan.label, monthlyVolume: plan.monthlyVolume, monthlyPrice: plan.monthlyPrice, currency: "NGN", status: "pending_checkout", paymentStatus: "not_started", termsAcceptedAt: new Date().toISOString(), sourceDisclosureRequired: true, consentRequired: true, replacementPolicyRequired: true },
+    data: { plan: parsed.data.plan, planLabel: plan.label, monthlyVolume: plan.monthlyVolume, monthlyPrice: plan.monthlyPrice, currency: "NGN", includedFeatures: plan.includedFeatures, status: "pending_checkout", paymentStatus: "not_started", termsAcceptedAt: new Date().toISOString(), sourceDisclosureRequired: true, consentRequired: true, replacementPolicyRequired: true },
     status: "pending_checkout",
     source: "user_confirmed",
     verificationStatus: "user_confirmed",

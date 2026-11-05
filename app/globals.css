@@ -959,7 +959,9 @@ button {
 }
 
 .kora-story-face-frame {
-  width: min(100%, 150px);
+  width: min(100%, 250px);
+  height: 300px;
+  overflow: hidden;
   margin: 1.1rem auto 0;
 }
 
@@ -967,6 +969,19 @@ button {
   width: 94%;
   height: 88%;
   filter: blur(25px);
+}
+
+.kora-model-loading {
+  width: 100%;
+  height: 100%;
+  border: 1px solid rgba(216, 180, 254, 0.12);
+  border-radius: 48% 48% 42% 42%;
+  background: radial-gradient(ellipse at 50% 40%, rgba(168, 85, 247, 0.18), transparent 68%);
+  animation: kora-model-pulse 1.8s ease-in-out infinite alternate;
+}
+
+@keyframes kora-model-pulse {
+  to { opacity: 0.45; }
 }
 
 .kora-story-caption {
@@ -1119,6 +1134,503 @@ button {
   border-radius: 50%;
   background: #bb88e6;
   box-shadow: 0 0 9px rgba(192, 133, 241, 0.55);
+}
+
+.kora-growth {
+  position: relative;
+  width: min(100% - 3rem, 1160px);
+  margin: 0 auto;
+  padding: clamp(4.5rem, 9vw, 7.5rem) 0;
+  border-top: 1px solid var(--kora-line);
+}
+
+.kora-growth-heading {
+  max-width: 760px;
+}
+
+.kora-growth-heading h2 {
+  margin: 1rem 0;
+  color: #f5f0fb;
+  font-size: clamp(2.4rem, 5vw, 4.65rem);
+  font-weight: 520;
+  letter-spacing: -0.07em;
+  line-height: 1.02;
+}
+
+.kora-growth-heading h2 span {
+  color: #c99be8;
+}
+
+.kora-growth-heading > p:last-child {
+  max-width: 650px;
+  margin: 1.1rem 0 0;
+  color: #aaa4b5;
+  font-size: 0.95rem;
+  line-height: 1.8;
+}
+
+.kora-growth-panel {
+  position: relative;
+  margin-top: 2.4rem;
+  padding: clamp(1.25rem, 3.5vw, 2.5rem);
+  overflow: hidden;
+  border: 1px solid rgba(226, 210, 241, 0.13);
+  border-radius: 18px;
+  background:
+    radial-gradient(ellipse at 92% 4%, rgba(147, 90, 190, 0.15), transparent 34rem),
+    linear-gradient(140deg, rgba(28, 23, 36, 0.88), rgba(13, 12, 19, 0.92));
+  box-shadow: 0 25px 80px rgba(0, 0, 0, 0.2);
+}
+
+.kora-growth-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 1.5rem;
+}
+
+.kora-growth-kicker {
+  color: #b99bcd;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.58rem;
+  letter-spacing: 0.13em;
+}
+
+.kora-growth-panel-heading h3 {
+  margin: 0.6rem 0 0;
+  color: #eee7f5;
+  font-size: clamp(1.15rem, 2.2vw, 1.55rem);
+  font-weight: 540;
+  letter-spacing: -0.035em;
+}
+
+.kora-growth-orbit {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid rgba(209, 164, 244, 0.32);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(170, 105, 212, 0.25), rgba(170, 105, 212, 0.04) 70%);
+  box-shadow: 0 0 36px rgba(175, 113, 226, 0.18);
+  color: #e6c6ff;
+  font-size: 1.2rem;
+  animation: kora-orbit-breathe 4s ease-in-out infinite alternate;
+}
+
+.kora-growth-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid rgba(231, 216, 244, 0.1);
+}
+
+.kora-growth-steps article {
+  min-width: 0;
+  padding: 1.5rem 1.35rem 1.4rem 0;
+  transition: transform 220ms ease;
+}
+
+.kora-growth-steps article + article {
+  padding-left: 1.35rem;
+  border-left: 1px solid rgba(231, 216, 244, 0.1);
+}
+
+.kora-growth-steps article:hover {
+  transform: translateY(-3px);
+}
+
+.kora-growth-step-number {
+  color: #c391e5;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+}
+
+.kora-growth-steps h4 {
+  margin: 1.05rem 0 0.5rem;
+  color: #eee6f5;
+  font-size: 0.96rem;
+  font-weight: 560;
+}
+
+.kora-growth-steps p {
+  max-width: 310px;
+  margin: 0;
+  color: #a8a1b1;
+  font-size: 0.76rem;
+  line-height: 1.75;
+}
+
+.kora-growth-markets,
+.kora-growth-channel-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  color: #c7b9d1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.68rem;
+}
+
+.kora-growth-explorer {
+  display: grid;
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+  align-items: stretch;
+  gap: clamp(1.25rem, 3vw, 2.25rem);
+  padding-top: 1.4rem;
+  border-top: 1px solid rgba(231, 216, 244, 0.1);
+}
+
+.kora-growth-pricing {
+  margin-top: 2rem;
+  padding-top: 1.6rem;
+  border-top: 1px solid rgba(231, 216, 244, 0.1);
+}
+
+.kora-growth-pricing-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-bottom: 1.2rem;
+}
+
+.kora-growth-pricing-heading h3 {
+  max-width: 520px;
+  margin: 0.55rem 0 0;
+  color: #eee7f5;
+  font-size: clamp(1.1rem, 2.3vw, 1.55rem);
+  font-weight: 540;
+  letter-spacing: -0.035em;
+}
+
+.kora-growth-pricing-heading > p {
+  max-width: 360px;
+  margin: 0;
+  color: #a8a1b1;
+  font-size: 0.72rem;
+  line-height: 1.7;
+}
+
+.kora-growth-tier-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.kora-growth-tier-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  padding: clamp(1.1rem, 2.5vw, 1.6rem);
+  border: 1px solid rgba(226, 210, 241, 0.14);
+  border-radius: 14px;
+  background: rgba(5, 5, 9, 0.34);
+  transition: transform 220ms ease, border-color 220ms ease, background 220ms ease, box-shadow 220ms ease;
+}
+
+.kora-growth-tier-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(201, 156, 235, 0.38);
+  background: rgba(31, 23, 40, 0.55);
+  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.17);
+}
+
+.kora-growth-tier-card.is-featured {
+  border-color: rgba(201, 156, 235, 0.42);
+  background:
+    radial-gradient(ellipse at 100% 0%, rgba(147, 90, 190, 0.15), transparent 22rem),
+    rgba(19, 14, 26, 0.62);
+}
+
+.kora-growth-tier-topline {
+  display: flex;
+  min-height: 1.2rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  color: #d7b8ee;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.kora-growth-tier-badge {
+  padding: 0.25rem 0.4rem;
+  border: 1px solid rgba(201, 156, 235, 0.25);
+  border-radius: 999px;
+  color: #d8c0eb;
+  font-size: 0.5rem;
+  letter-spacing: 0.06em;
+}
+
+.kora-growth-tier-volume {
+  margin: 1rem 0 0;
+  color: #c9c0d0;
+  font-size: 0.76rem;
+}
+
+.kora-growth-tier-price {
+  margin: 0.3rem 0 0;
+  color: #f4edfa;
+  font-size: clamp(1.75rem, 4vw, 2.3rem);
+  font-weight: 560;
+  letter-spacing: -0.065em;
+}
+
+.kora-growth-tier-price span {
+  color: #9c93a7;
+  font-size: 0.7rem;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.kora-growth-tier-description {
+  min-height: 2.8rem;
+  margin: 0.55rem 0 0;
+  color: #a8a1b1;
+  font-size: 0.72rem;
+  line-height: 1.65;
+}
+
+.kora-growth-tier-card ul {
+  display: grid;
+  gap: 0.65rem;
+  margin: 1.1rem 0 1.25rem;
+  padding: 1rem 0 0;
+  border-top: 1px solid rgba(231, 216, 244, 0.1);
+  list-style: none;
+}
+
+.kora-growth-tier-card li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  color: #c9c0d0;
+  font-size: 0.68rem;
+  line-height: 1.5;
+}
+
+.kora-growth-tier-card li > span {
+  flex: 0 0 auto;
+  color: #d2a8f0;
+}
+
+.kora-growth-tier-action {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  margin-top: auto;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid rgba(201, 156, 235, 0.28);
+  border-radius: 9px;
+  background: rgba(155, 92, 207, 0.1);
+  color: #e8d8f6;
+  font-size: 0.7rem;
+  transition: border-color 180ms ease, background 180ms ease, color 180ms ease;
+}
+
+.kora-growth-tier-action:hover {
+  border-color: rgba(201, 156, 235, 0.58);
+  background: rgba(155, 92, 207, 0.2);
+  color: #fff;
+}
+
+.kora-growth-tier-action:focus-visible {
+  outline: 2px solid #d5aff3;
+  outline-offset: 3px;
+}
+
+.kora-growth-tier-note {
+  margin: 0.9rem 0 0;
+  color: #827b8c;
+  font-size: 0.62rem;
+  line-height: 1.65;
+}
+
+.kora-growth-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.kora-growth-control-label {
+  margin: 0 0 0.7rem;
+  color: #978ca3;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.kora-growth-markets button,
+.kora-growth-channel-row button {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.48rem 0.68rem;
+  border: 1px solid rgba(226, 210, 241, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.025);
+  color: #bdb4c8;
+  font: inherit;
+  letter-spacing: 0;
+  transition: color 180ms ease, border-color 180ms ease, background 180ms ease, transform 180ms ease;
+}
+
+.kora-growth-markets button:hover,
+.kora-growth-channel-row button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(201, 156, 235, 0.42);
+  color: #f3e9ff;
+}
+
+.kora-growth-markets button:focus-visible,
+.kora-growth-channel-row button:focus-visible {
+  outline: 2px solid #d5aff3;
+  outline-offset: 3px;
+}
+
+.kora-growth-markets button.is-selected,
+.kora-growth-channel-row button.is-selected {
+  border-color: rgba(202, 156, 235, 0.48);
+  background: rgba(155, 92, 207, 0.16);
+  color: #f2e3ff;
+}
+
+.kora-growth-channel-row {
+  gap: 0.55rem;
+}
+
+.kora-growth-channel-row button > span {
+  display: grid;
+  width: 15px;
+  height: 15px;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(192, 133, 241, 0.16);
+  color: #d7b4f1;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.7rem;
+}
+
+.kora-lead-preview {
+  min-width: 0;
+  padding: 1.1rem 1.2rem;
+  border: 1px solid rgba(221, 193, 244, 0.14);
+  border-radius: 13px;
+  background:
+    radial-gradient(ellipse at 100% 0%, rgba(147, 90, 190, 0.13), transparent 70%),
+    rgba(5, 5, 9, 0.42);
+  animation: kora-copy-arrive 420ms ease both;
+}
+
+.kora-lead-preview-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+}
+
+.kora-lead-preview-heading h4 {
+  margin: 0.45rem 0 0;
+  color: #f0e8f7;
+  font-size: 1.02rem;
+  font-weight: 560;
+  letter-spacing: -0.025em;
+}
+
+.kora-lead-preview-mark {
+  display: grid;
+  width: 37px;
+  height: 37px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid rgba(209, 164, 244, 0.3);
+  border-radius: 50%;
+  background: rgba(170, 105, 212, 0.11);
+  color: #e6c6ff;
+  font-size: 0.82rem;
+}
+
+.kora-lead-preview-summary {
+  min-height: 1.2rem;
+  margin: 0.8rem 0;
+  color: #b9a7c7;
+  font-size: 0.73rem;
+  line-height: 1.6;
+}
+
+.kora-lead-preview ul {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.kora-lead-preview li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  color: #c9c0d0;
+  font-size: 0.69rem;
+  line-height: 1.55;
+}
+
+.kora-lead-preview li > span:first-child {
+  flex: 0 0 auto;
+  color: #bd91dc;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.58rem;
+}
+
+.kora-lead-preview-note {
+  margin: 0.9rem 0 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(231, 216, 244, 0.09);
+  color: #827b8c;
+  font-size: 0.61rem;
+  line-height: 1.65;
+}
+
+.kora-growth-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  margin-top: 1.4rem;
+}
+
+.kora-growth-footer > p {
+  max-width: 680px;
+  margin: 0;
+  color: #8f899a;
+  font-size: 0.69rem;
+  line-height: 1.75;
+}
+
+.kora-growth-footer > p strong {
+  color: #cfc2db;
+  font-weight: 600;
+}
+
+.kora-growth-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+}
+
+@keyframes kora-orbit-breathe {
+  to { transform: scale(1.06); box-shadow: 0 0 45px rgba(175, 113, 226, 0.3); }
 }
 
 .kora-how {
@@ -1466,6 +1978,7 @@ button {
   .kora-hero,
   .kora-proof-strip,
   .kora-capabilities,
+  .kora-growth,
   .kora-how,
   .kora-trust,
   .kora-cta,
@@ -1521,6 +2034,22 @@ button {
   .kora-feature-card {
     padding: 1.3rem;
   }
+
+  .kora-growth-footer {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 1.2rem;
+  }
+
+  .kora-growth-tier-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .kora-growth-pricing-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
 }
 
 @media (max-width: 680px) {
@@ -1528,6 +2057,7 @@ button {
   .kora-hero,
   .kora-proof-strip,
   .kora-capabilities,
+  .kora-growth,
   .kora-how,
   .kora-trust,
   .kora-cta,
@@ -1751,7 +2281,8 @@ button {
   }
 
   .kora-story-face-frame {
-    width: min(40vw, 140px);
+    width: min(62vw, 220px);
+    height: 260px;
     margin-top: 0.65rem;
   }
 
@@ -1783,6 +2314,85 @@ button {
 
   .kora-feature-description {
     font-size: 0.77rem;
+  }
+
+  .kora-growth {
+    padding-top: 3.8rem;
+    padding-bottom: 3.8rem;
+  }
+
+  .kora-growth-heading h2 {
+    font-size: clamp(2.15rem, 9vw, 3rem);
+  }
+
+  .kora-growth-heading > p:last-child {
+    font-size: 0.87rem;
+  }
+
+  .kora-growth-panel {
+    margin-top: 1.5rem;
+    padding: 1.15rem;
+  }
+
+  .kora-growth-explorer {
+    grid-template-columns: 1fr;
+    gap: 1.2rem;
+  }
+
+  .kora-growth-tier-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .kora-growth-tier-description {
+    min-height: 0;
+  }
+
+  .kora-growth-controls {
+    gap: 1.2rem;
+  }
+
+  .kora-growth-markets,
+  .kora-growth-channel-row {
+    gap: 0.45rem;
+  }
+
+  .kora-growth-markets button,
+  .kora-growth-channel-row button {
+    min-height: 38px;
+    padding: 0.5rem 0.6rem;
+    font-size: 0.66rem;
+  }
+
+  .kora-lead-preview {
+    padding: 1rem;
+  }
+
+  .kora-growth-steps {
+    grid-template-columns: 1fr;
+  }
+
+  .kora-growth-steps article,
+  .kora-growth-steps article + article {
+    padding: 1.1rem 0;
+    border-left: 0;
+  }
+
+  .kora-growth-steps article + article {
+    border-top: 1px solid rgba(231, 216, 244, 0.1);
+  }
+
+  .kora-growth-steps h4 {
+    margin-top: 0.6rem;
+  }
+
+  .kora-growth-footer > p {
+    font-size: 0.66rem;
+  }
+
+  .kora-growth-actions {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.9rem;
   }
 
   .kora-how {
