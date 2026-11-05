@@ -69,7 +69,7 @@ function applyModelPose(
   headNodes.forEach(({ node, factor, baseX, baseY }) => {
     if (!node.rotation) return;
     node.rotation.y = baseY + gaze.x * 0.04 * factor;
-    node.rotation.x = baseX - gaze.y * 0.025 * factor;
+    node.rotation.x = baseX + gaze.y * 0.025 * factor;
   });
   if (!reducedMotion) {
     const breath = Math.sin(timestamp / 1500);
