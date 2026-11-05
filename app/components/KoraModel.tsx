@@ -112,20 +112,39 @@ export default function KoraModel({ gaze, blinking, expression, priority = false
   useEffect(() => {
     if (!visible) return;
     let disposed = false;
+    const configureDecoder = () => {
+      const modelViewerWindow = window as Window & {
+        ModelViewerElement?: { dracoDecoderLocation?: string };
+      };
+      if (!modelViewerWindow.ModelViewerElement) modelViewerWindow.ModelViewerElement = {};
+      modelViewerWindow.ModelViewerElement.dracoDecoderLocation = "/vendor/draco/";
+
+      const modelViewer = customElements.get("model-viewer") as
+        | (CustomElementConstructor & { dracoDecoderLocation?: string })
+        | undefined;
+      if (modelViewer) modelViewer.dracoDecoderLocation = "/vendor/draco/";
+    };
     const sources = [
       "/vendor/model-viewer.min.js",
       "https://unpkg.com/@google/model-viewer@4.1.0/dist/model-viewer.min.js",
       "https://cdn.jsdelivr.net/npm/@google/model-viewer@4.1.0/dist/model-viewer.min.js",
     ];
+    const configureRuntime = () => {
+      configureDecoder();
+      if (!disposed) setReady(true);
+    };
     const loadRuntime = (index: number) => {
       if (disposed) return;
+      configureDecoder();
       if (customElements.get("model-viewer")) {
-        setReady(true);
+        configureRuntime();
         return;
       }
       const existing = document.querySelector('script[data-kora-model-viewer]');
       if (existing) {
-        customElements.whenDefined("model-viewer").then(() => { if (!disposed) setReady(true); }).catch(() => setFailed(true));
+        customElements.whenDefined("model-viewer").then(configureRuntime).catch(() => {
+          if (!disposed) setFailed(true);
+        });
         return;
       }
       if (!sources[index]) {
@@ -136,7 +155,7 @@ export default function KoraModel({ gaze, blinking, expression, priority = false
       script.type = "module";
       script.src = sources[index];
       script.dataset.koraModelViewer = "true";
-      script.onload = () => customElements.whenDefined("model-viewer").then(() => { if (!disposed) setReady(true); }).catch(() => loadRuntime(index + 1));
+      script.onload = () => customElements.whenDefined("model-viewer").then(configureRuntime).catch(() => loadRuntime(index + 1));
       script.onerror = () => { script.remove(); loadRuntime(index + 1); };
       document.head.appendChild(script);
     };
@@ -215,7 +234,7 @@ export default function KoraModel({ gaze, blinking, expression, priority = false
       element.removeEventListener("error", handleError);
       window.clearTimeout(timeout);
     };
-  }, [visible, retryNonce, modelLoaded, failed]);
+  }, [ready, visible, retryNonce, modelLoaded, failed]);
 
   useEffect(() => {
     if (!modelLoaded || poseReady) return;
@@ -260,10 +279,10 @@ export default function KoraModel({ gaze, blinking, expression, priority = false
     faceNodesRef.current = [];
     setRetryNonce((value) => value + 1);
   };
-  const model = visible && !failed ? createElement("model-viewer", {
+  const model = ready && visible && !failed ? createElement("model-viewer", {
     "data-kora-model": "true",
     key: `kora-model-${retryNonce}`,
-    src: `/models/Korar1-fast.glb?v=${retryNonce}`,
+    src: `/models/Korar1-draco.glb?v=${retryNonce}`,
     alt: "Kora's animated 3D face and upper body",
     reveal: "auto",
     loading: "eager",

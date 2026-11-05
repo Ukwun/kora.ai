@@ -4,7 +4,11 @@ import { isTransactionalEmailConfigured } from "@/lib/email-provider";
 import { isWhatsAppConfigured } from "@/lib/whatsapp";
 
 export async function GET() {
-  let database: "ok" | "unavailable" | "ok-development-file-store" = postgresEnabled ? "unavailable" : "ok-development-file-store";
+  let database: "ok" | "unavailable" | "ok-development-file-store" = postgresEnabled
+    ? "unavailable"
+    : process.env.NODE_ENV === "production"
+      ? "unavailable"
+      : "ok-development-file-store";
   if (postgresEnabled) {
     try { await query("SELECT 1 AS ok"); database = "ok"; } catch { database = "unavailable"; }
   }
