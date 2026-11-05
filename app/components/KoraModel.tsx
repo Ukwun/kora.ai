@@ -184,21 +184,16 @@ export default function KoraModel({ gaze, blinking, expression, priority = false
     const handleLoad = () => {
       if (initialized) return;
       const scene = getModelScene(element);
-      if (!scene) {
-        console.error("Kora's 3D scene is unavailable.");
-        setFailed(true);
-        return;
-      }
+      if (!scene) return;
+      initialized = true;
 
       const headNodes: { node: ModelNode; factor: number; baseX: number; baseY: number }[] = [];
       const bodyNodes: BodyNode[] = [];
       const faceNodes: ModelNode[] = [];
-      let skirtFound = false;
       scene.traverse((object) => {
         const name = object.name.toLowerCase();
         if (name === "saia" || name.startsWith("saia001")) {
           object.visible = false;
-          skirtFound = true;
         }
         if (object.rotation && (name.endsWith("head") || name.endsWith("neck"))) {
           headNodes.push({
@@ -219,13 +214,6 @@ export default function KoraModel({ gaze, blinking, expression, priority = false
         if (object.morphTargetDictionary && object.morphTargetInfluences) faceNodes.push(object);
       });
 
-      if (!skirtFound) {
-        console.error("Kora's detached skirt mesh could not be hidden.");
-        setFailed(true);
-        return;
-      }
-
-      initialized = true;
       headNodesRef.current = headNodes;
       bodyNodesRef.current = bodyNodes;
       faceNodesRef.current = faceNodes;
@@ -245,8 +233,9 @@ export default function KoraModel({ gaze, blinking, expression, priority = false
     element.addEventListener("load", handleLoad);
     element.addEventListener("error", handleError);
     if (element.model) queueMicrotask(handleLoad);
+    const scenePoll = window.setInterval(handleLoad, 100);
     const timeout = window.setTimeout(() => {
-      if (!modelLoaded) {
+      if (!initialized) {
         console.error("Kora's 3D model timed out.");
         headNodesRef.current = [];
         bodyNodesRef.current = [];
@@ -257,6 +246,7 @@ export default function KoraModel({ gaze, blinking, expression, priority = false
     return () => {
       element.removeEventListener("load", handleLoad);
       element.removeEventListener("error", handleError);
+      window.clearInterval(scenePoll);
       window.clearTimeout(timeout);
     };
   }, [ready, visible, retryNonce, modelLoaded, failed]);
