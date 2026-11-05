@@ -269,7 +269,8 @@ export default function KoraModel({ gaze, blinking, expression, priority = false
     loading: "eager",
     autoplay: true,
     "animation-name": "Armaturecorpo.001|Armaturecorpo.001|Armature|mixamo.com|Layer0",
-    "camera-target": "-12.4m 32.7m 0.3m",
+    // Preserve the established hero framing; interaction changes must not move Kora.
+    "camera-target": "39m 93m -2m",
     "camera-orbit": cameraOrbit,
     "field-of-view": "30deg",
     "min-camera-orbit": "auto auto 0m",
