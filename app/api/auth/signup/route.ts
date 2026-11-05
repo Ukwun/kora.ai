@@ -5,6 +5,8 @@ import { z } from "zod";
 import { createOrganization, createUser, findUserByEmail, readDatabase, writeDatabase } from "@/lib/store";
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from "@/lib/email-provider";
 import { setSessionCookie } from "@/lib/session";
+import { checkRequestRateLimit } from "@/lib/security";
+import { isProductionRuntime } from "@/lib/database-config";
 
 const signupSchema = z.object({
   name: z.string().trim().min(2),
@@ -15,6 +17,9 @@ const signupSchema = z.object({
 
 export async function POST(request: Request) {
   try {
+    if (!(await checkRequestRateLimit(request, "auth:signup", 5, 60 * 60))) {
+      return NextResponse.json({ error: "Too many sign-up attempts. Try again later." }, { status: 429 });
+    }
     const body = await request.json().catch(() => null);
     const parsed = signupSchema.safeParse(body);
 
@@ -28,7 +33,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Passwords do not match." }, { status: 400 });
     }
 
-    if (process.env.NODE_ENV === "production" && (!isTransactionalEmailConfigured() || !process.env.APP_URL)) {
+    if (isProductionRuntime() && (!isTransactionalEmailConfigured() || !process.env.APP_URL)) {
       return NextResponse.json({ error: "Account verification email is not configured for this deployment." }, { status: 503 });
     }
 
@@ -68,7 +73,19 @@ export async function POST(request: Request) {
         console.error("Account created but verification email delivery failed.", error);
       }
     }
-    const response = NextResponse.json({ success: true, authenticated: true, needsVerification: true, verificationEmailSent, message: verificationEmailSent ? "Workspace created. Check your email when convenient to verify your account." : "Workspace created. Email verification is pending, but you can continue into your workspace.", ...(process.env.NODE_ENV !== "production" && !isTransactionalEmailConfigured() ? { developmentVerificationUrl: `/auth/verify?token=${encodeURIComponent(verificationToken)}` } : {}) }, { status: 201 });
+    if (isProductionRuntime() && !verificationEmailSent) {
+      return NextResponse.json({ error: "Your workspace was created, but the verification email could not be delivered. Request a new verification link before signing in." }, { status: 502 });
+    }
+    if (isProductionRuntime()) {
+      return NextResponse.json({
+        success: true,
+        authenticated: false,
+        needsVerification: true,
+        verificationEmailSent: true,
+        message: "Workspace created. Verify your email before signing in.",
+      }, { status: 201 });
+    }
+    const response = NextResponse.json({ success: true, authenticated: true, needsVerification: true, verificationEmailSent, message: verificationEmailSent ? "Workspace created. Check your email when convenient to verify your account." : "Workspace created. Email verification is pending, but you can continue into your workspace.", ...(!isTransactionalEmailConfigured() ? { developmentVerificationUrl: `/auth/verify?token=${encodeURIComponent(verificationToken)}` } : {}) }, { status: 201 });
     return await setSessionCookie(response, { id: user.id, name: user.name, email: user.email, role: user.role, organizationId: user.organizationId });
   } catch (error) {
     console.error("Sign-up failed.", error);

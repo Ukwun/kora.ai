@@ -4,16 +4,21 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { findUserByEmail, readDatabase, writeDatabase } from "@/lib/store";
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from "@/lib/email-provider";
+import { checkRequestRateLimit } from "@/lib/security";
+import { isProductionRuntime } from "@/lib/database-config";
 
 const requestSchema = z.object({ email: z.string().email() });
 const resetSchema = z.object({ token: z.string().min(32), password: z.string().min(8) });
 
 export async function POST(request: Request) {
+  if (!(await checkRequestRateLimit(request, "auth:password-recovery", 5, 15 * 60))) {
+    return NextResponse.json({ error: "Too many password recovery attempts. Try again later." }, { status: 429 });
+  }
   const body = await request.json().catch(() => null);
   if (body && typeof body === "object" && "email" in body) {
     const parsed = requestSchema.safeParse(body);
     if (!parsed.success) return NextResponse.json({ error: "Enter a valid email." }, { status: 400 });
-    if (process.env.NODE_ENV === "production" && (!isTransactionalEmailConfigured() || !process.env.APP_URL)) {
+    if (isProductionRuntime() && (!isTransactionalEmailConfigured() || !process.env.APP_URL)) {
       return NextResponse.json({ error: "Password recovery email is not configured for this deployment." }, { status: 503 });
     }
     const user = await findUserByEmail(parsed.data.email);
@@ -33,7 +38,7 @@ export async function POST(request: Request) {
         html: `<p>Use the link below to reset your Kora password. It expires in 30 minutes.</p><p><a href="${resetUrl}">Reset password</a></p>`,
       });
     }
-    return NextResponse.json({ success: true, message: "If that account exists, reset instructions have been sent.", ...(process.env.NODE_ENV !== "production" && !isTransactionalEmailConfigured() ? { developmentResetToken: token } : {}) });
+    return NextResponse.json({ success: true, message: "If that account exists, reset instructions have been sent.", ...(!isProductionRuntime() && !isTransactionalEmailConfigured() ? { developmentResetToken: token } : {}) });
   }
   const parsed = resetSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Invalid reset request." }, { status: 400 });

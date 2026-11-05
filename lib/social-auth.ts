@@ -11,11 +11,11 @@ export function createOAuthState() {
 
 export function getOAuthBaseUrl(request: NextRequest) {
   const configuredUrl = process.env.APP_URL || process.env.API_BASE_URL;
-  const baseUrl = configuredUrl || (process.env.NODE_ENV === "production" ? "" : request.nextUrl.origin);
+  const baseUrl = configuredUrl || (isProductionRuntime() ? "" : request.nextUrl.origin);
   if (!baseUrl) throw new Error("APP_URL must be configured for social sign-in.");
 
   const url = new URL(baseUrl);
-  if (process.env.NODE_ENV === "production" && url.protocol !== "https:") {
+  if (isProductionRuntime() && url.protocol !== "https:") {
     throw new Error("Social sign-in requires an HTTPS APP_URL in production.");
   }
   return url.origin;
@@ -72,3 +72,4 @@ export async function signInWithVerifiedOAuthEmail(
     organizationId: membership.organizationId,
   });
 }
+import { isProductionRuntime } from "./database-config";

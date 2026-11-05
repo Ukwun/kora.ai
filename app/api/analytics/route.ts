@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/session";
 import type { Customer, Invoice, Payment, Task } from "@/lib/store";
 import { listOrganizationRecords } from "@/lib/operations";
-import { canPerformAction, checkRateLimit } from "@/lib/security";
+import { canPerformAction, checkDistributedRateLimit } from "@/lib/security";
 
 const windows = {
   week: (now: Date) => { const date = new Date(now); date.setHours(0, 0, 0, 0); date.setDate(date.getDate() - ((date.getDay() + 6) % 7)); return date; },
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
   const session = await getSessionFromRequest(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!canPerformAction(session, "view_reports") && !canPerformAction(session, "view_own_data") && !canPerformAction(session, "all_data_access")) return NextResponse.json({ error: "Insufficient permissions." }, { status: 403 });
-  if (!checkRateLimit(`analytics_${session.id}`, 60, 60)) return NextResponse.json({ error: "Too many requests." }, { status: 429 });
+  if (!(await checkDistributedRateLimit(`analytics_${session.id}`, 60, 60))) return NextResponse.json({ error: "Too many requests." }, { status: 429 });
 
   const teamAccess = canPerformAction(session, "view_team_data") || canPerformAction(session, "all_data_access");
   const [customerRows, taskRows, invoiceRows, paymentRows] = await Promise.all([

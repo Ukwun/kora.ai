@@ -7,6 +7,7 @@ import { readDatabase, writeDatabase } from "@/lib/store";
 import { sendTransactionalEmail, isTransactionalEmailConfigured } from "@/lib/email-provider";
 import { findOrganizationById } from "@/lib/store";
 import { logAudit } from "@/lib/security";
+import { isProductionRuntime } from "@/lib/database-config";
 
 const schema = z.object({ email: z.string().email(), role: z.enum(["admin", "manager", "employee"]).default("employee") });
 
@@ -36,7 +37,7 @@ export async function POST(request: NextRequest) {
   const existingUser = database.users.find((user) => user.email.toLowerCase() === email);
   if (database.memberships.some((member) => member.organizationId === session.organizationId && member.email.toLowerCase() === email && member.status === "active")) return NextResponse.json({ error: "This person is already a workspace member." }, { status: 409 });
   if (database.memberships.some((member) => member.organizationId === session.organizationId && member.email.toLowerCase() === email && member.status === "invited" && (!member.expiresAt || Date.parse(member.expiresAt) > Date.now()))) return NextResponse.json({ error: "This person already has a pending invitation." }, { status: 409 });
-  if (process.env.NODE_ENV === "production" && !isTransactionalEmailConfigured()) return NextResponse.json({ error: "Invitation email is not configured." }, { status: 503 });
+  if (isProductionRuntime() && !isTransactionalEmailConfigured()) return NextResponse.json({ error: "Invitation email is not configured." }, { status: 503 });
   const token = randomBytes(32).toString("hex");
   const createdAt = new Date().toISOString();
   const invite: import("@/lib/store").Membership = { id: `invite_${randomUUID()}`, organizationId: session.organizationId, userId: existingUser?.id, email, role: parsed.data.role, status: "invited", token: createHash("sha256").update(token).digest("hex"), expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), createdAt };
@@ -49,5 +50,5 @@ export async function POST(request: NextRequest) {
     catch { invite.status = "revoked"; invite.token = undefined; await writeDatabase(database); return NextResponse.json({ error: "Invitation email could not be delivered. No active invitation was kept." }, { status: 502 }); }
   }
   await logAudit({ userId: session.id, organizationId: session.organizationId, action: "data.create", resource: "membership_invite", resourceId: invite.id, status: "success", details: { email, role: invite.role, expiresAt: invite.expiresAt }, ipAddress: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown" });
-  return NextResponse.json({ success: true, data: { id: invite.id, organizationId: invite.organizationId, email: invite.email, role: invite.role, status: invite.status, expiresAt: invite.expiresAt, ...(process.env.NODE_ENV !== "production" && !isTransactionalEmailConfigured() ? { inviteUrl } : {}) } }, { status: 201 });
+  return NextResponse.json({ success: true, data: { id: invite.id, organizationId: invite.organizationId, email: invite.email, role: invite.role, status: invite.status, expiresAt: invite.expiresAt, ...(!isProductionRuntime() && !isTransactionalEmailConfigured() ? { inviteUrl } : {}) } }, { status: 201 });
 }

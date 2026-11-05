@@ -1,15 +1,12 @@
 import { Pool, type QueryResultRow } from "pg";
+import { getDatabasePoolConfig } from "./database-config";
 
 const connectionString = process.env.DATABASE_URL;
 
 export const postgresEnabled = Boolean(connectionString);
 
 const pool = connectionString
-  ? new Pool({
-      connectionString,
-      max: Number(process.env.DATABASE_POOL_MAX ?? 10),
-      ssl: process.env.DATABASE_SSL === "false" ? false : { rejectUnauthorized: false },
-    })
+  ? new Pool(getDatabasePoolConfig(connectionString))
   : null;
 
 export async function query<T extends QueryResultRow = QueryResultRow>(text: string, values: unknown[] = []) {

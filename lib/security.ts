@@ -1,7 +1,7 @@
-import { NextRequest } from "next/server";
+import type { NextRequest } from "next/server";
 import { postgresEnabled, query } from "./db";
-import { Redis } from "@upstash/redis";
-import { Ratelimit } from "@upstash/ratelimit";
+import { isProductionRuntime } from "./database-config";
+export { checkDistributedRateLimit, checkRateLimit, checkRequestRateLimit, getClientIP } from "./rate-limit";
 
 export type OrganizationUser = {
   id: string;
@@ -10,10 +10,6 @@ export type OrganizationUser = {
   role: string;
   organizationId: string;
 };
-
-// Rate limiting storage (in production, use Redis)
-const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
-const distributedLimiters = new Map<string, Ratelimit>();
 
 // Audit log types
 export type AuditLogAction =
@@ -76,47 +72,6 @@ export function validatePassword(password: string): {
 
 export function sanitizeInput(input: string, maxLength: number = 1000): string {
   return input.substring(0, maxLength).trim().replace(/[<>]/g, "");
-}
-
-// Rate limiting
-export function checkRateLimit(
-  identifier: string,
-  limit: number = 100,
-  windowSeconds: number = 60
-): boolean {
-  const now = Date.now();
-  const limiter = rateLimitStore.get(identifier);
-
-  if (!limiter || now > limiter.resetTime) {
-    rateLimitStore.set(identifier, { count: 1, resetTime: now + windowSeconds * 1000 });
-    return true;
-  }
-
-  if (limiter.count >= limit) {
-    return false;
-  }
-
-  limiter.count++;
-  return true;
-}
-
-export async function checkDistributedRateLimit(identifier: string, limit = 100, windowSeconds = 60) {
-  if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) return checkRateLimit(identifier, limit, windowSeconds);
-  const key = `${limit}:${windowSeconds}`;
-  let limiter = distributedLimiters.get(key);
-  if (!limiter) {
-    limiter = new Ratelimit({ redis: Redis.fromEnv(), limiter: Ratelimit.slidingWindow(limit, `${windowSeconds} s`), analytics: true, prefix: "kora" });
-    distributedLimiters.set(key, limiter);
-  }
-  const result = await limiter.limit(identifier);
-  return result.success;
-}
-
-// Extract client IP from request
-export function getClientIP(request: NextRequest): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  const ip = forwarded ? forwarded.split(":")[0] : request.headers.get("x-real-ip") || "unknown";
-  return ip;
 }
 
 // Extract user agent from request
@@ -201,7 +156,7 @@ export async function logAudit(
         auditLog.timestamp,
       ]
     );
-  } else if (process.env.NODE_ENV !== "production") {
+  } else if (!isProductionRuntime()) {
     console.log(`[AUDIT] ${auditLog.action} | User: ${auditLog.userId} | Org: ${auditLog.organizationId} | Status: ${auditLog.status}`);
   }
 

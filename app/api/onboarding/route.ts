@@ -8,7 +8,7 @@ import {
 } from "@/lib/business-memory";
 import { findOrganizationById, findUserByEmail, saveBusinessProfile, updateOrganizationProfile } from "@/lib/store";
 import {
-  checkRateLimit,
+  checkDistributedRateLimit,
   getClientIP,
   logAudit,
   canAccessOrganization,
@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
 
     // Rate limiting
     const rateLimitKey = `onboarding_${session.id}`;
-    if (!checkRateLimit(rateLimitKey, 50, 60)) {
+    if (!(await checkDistributedRateLimit(rateLimitKey, 50, 60))) {
       return NextResponse.json(
         { error: "Too many requests" },
         { status: 429 }

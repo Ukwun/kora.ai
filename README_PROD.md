@@ -45,15 +45,9 @@ npm run dev
 
 5. Open [http://localhost:3000](http://localhost:3000) in your browser
 
-## 📝 Environment Variables
+## Environment Variables
 
-See `.env.example` for all available configuration options:
-
-- `SESSION_SECRET` - HMAC secret for session signing (generate a random string)
-- `NODE_ENV` - Set to `production` for production builds
-- `DATABASE_TYPE` - Currently uses `json`, can be upgraded to PostgreSQL
-- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` - Google OAuth credentials
-- `FACEBOOK_APP_ID` / `FACEBOOK_APP_SECRET` - Facebook OAuth credentials
+See `.env.example` and [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) for the current requirements. Production requires PostgreSQL, a 32-character-or-longer `SESSION_SECRET`, HTTPS `APP_URL`, verified transactional email, Firebase Admin credentials, and Upstash Redis. Production does not use `DATABASE_TYPE=json` or the local JSON file store. OAuth and payment integrations require their paired credentials and provider-side callback/webhook configuration.
 
 ## 🏗️ Project Structure
 
@@ -67,24 +61,19 @@ kora/
 │   ├── page.tsx                # Landing page & auth
 │   └── globals.css             # Global styles
 ├── lib/
-│   ├── auth.ts                 # Auth utilities
+│   ├── db.ts                   # PostgreSQL connection pool
 │   ├── session.ts              # Session management
-│   └── store.ts                # Data store (JSON)
-├── data/
-│   └── app-db.json            # Application data
+│   └── store.ts                # PostgreSQL-backed records; JSON in development only
+├── migrations/                 # PostgreSQL schema migrations
 ├── public/                      # Static assets
-├── middleware.ts                # Route protection
+├── proxy.ts                     # API rate limiting and route protection
 └── next.config.ts               # Next.js configuration
 ```
 
 ## 🔐 Authentication
 
-### Demo Account
-- **Email:** demo@kora.ng
-- **Password:** demo1234
-
 ### Signup Flow
-Users can create an account with email/password and immediately access the dashboard. Organizations and roles are assigned automatically.
+In production, new accounts must verify their email before signing in. Verification and password-recovery links require a working Resend configuration and a verified sender domain. Do not rely on development-only test accounts or local file storage.
 
 ### OAuth
 - Google OAuth support (configure in `.env.local`)
@@ -94,24 +83,7 @@ Users can create an account with email/password and immediately access the dashb
 
 ### Netlify Deployment
 
-1. **Connect Repository:**
-   - Push code to GitHub
-   - Sign in to [Netlify](https://netlify.com)
-   - Click "New site from Git"
-   - Select this GitHub repository
-   - Netlify will auto-detect Next.js configuration
-
-2. **Configure Build Settings:**
-   - Build command: `npm run build`
-   - Publish directory: `.next`
-
-3. **Set Environment Variables:**
-   - Go to Site Settings → Environment
-   - Add all variables from `.env.example`
-   - Ensure `NODE_ENV=production` and `SESSION_SECRET` are set
-
-4. **Deploy:**
-   - Netlify will automatically build and deploy on push to main branch
+Follow [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) for the supported Netlify build, required services, environment-variable contexts, staging tests, and production release gates. The configured build runs PostgreSQL migrations before the Next.js build; configure a managed pooler, verified TLS, and all required secrets before deploying.
 
 ### Local Production Build
 
@@ -196,18 +168,17 @@ npm run lint
 - HMAC-signed session cookies
 - Password hashing with bcryptjs
 - Input validation with Zod
-- Protected API routes with middleware
-- Security headers (CORS, CSP, etc.)
+- Workspace and role checks in API handlers
+- Shared Upstash rate limits in the Next.js Proxy
+- Security response headers configured in `netlify.toml`
 
 ## 📈 Roadmap
 
-- [ ] PostgreSQL database integration
-- [ ] Email verification
-- [ ] Advanced analytics
-- [ ] API integrations (Stripe, Gmail, WhatsApp)
-- [ ] Team collaboration features
-- [ ] Custom workflows
-- [ ] Webhook support
+- [ ] Verify Resend delivery and account recovery with the production sender domain
+- [ ] Complete authenticated end-to-end checks on an isolated staging database
+- [ ] Load-test representative authenticated database reads at the target concurrency
+- [ ] Configure and test only the OAuth, payment, and messaging integrations planned for launch
+- [ ] Confirm backup/restore, monitoring, and rollback procedures before launch
 
 ## 🐛 Known Issues
 

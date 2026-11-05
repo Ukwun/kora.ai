@@ -3,6 +3,8 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { findUserByEmail, listUserMemberships } from "@/lib/store";
 import { setSessionCookie } from "@/lib/session";
+import { checkRequestRateLimit } from "@/lib/security";
+import { isProductionRuntime } from "@/lib/database-config";
 
 const signinSchema = z.object({
   email: z.string().trim().email(),
@@ -11,6 +13,9 @@ const signinSchema = z.object({
 
 export async function POST(request: Request) {
   try {
+    if (!(await checkRequestRateLimit(request, "auth:signin", 10, 15 * 60))) {
+      return NextResponse.json({ error: "Too many sign-in attempts. Try again later." }, { status: 429 });
+    }
     const body = await request.json();
     const parsed = signinSchema.safeParse(body);
 
@@ -27,6 +32,9 @@ export async function POST(request: Request) {
 
     if (user.accountStatus === "suspended") {
       return NextResponse.json({ error: "This account is unavailable. Contact your workspace owner." }, { status: 403 });
+    }
+    if (isProductionRuntime() && !user.emailVerified) {
+      return NextResponse.json({ error: "Verify your email before signing in, or request a new verification link." }, { status: 403 });
     }
     const validPassword = await bcrypt.compare(password, user.passwordHash);
     if (!validPassword) {

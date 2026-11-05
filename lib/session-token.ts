@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { NextRequest, NextResponse } from "next/server";
+import { isProductionRuntime } from "./database-config";
 
 export type SessionUser = { id: string; name: string; email: string; role: string; organizationId: string };
 type SessionPayload = SessionUser & { expiresAt: number };
@@ -7,7 +8,7 @@ const cookieName = "kora_session";
 
 function secret() {
   const configured = process.env.SESSION_SECRET;
-  if (process.env.NODE_ENV === "production" && (!configured || configured.length < 32)) throw new Error("SESSION_SECRET must be at least 32 characters in production");
+  if (isProductionRuntime() && (!configured || configured.length < 32)) throw new Error("SESSION_SECRET must be at least 32 characters in production");
   return (configured || "kora-session-secret-dev").padEnd(32, "0");
 }
 const sign = (value: string) => createHmac("sha256", secret()).update(value).digest("hex");
@@ -40,11 +41,11 @@ export async function setSessionCookie(response: NextResponse, user: SessionUser
   const maxAge = 60 * 60 * 24 * 7;
   const content = JSON.stringify({ ...user, expiresAt: Date.now() + maxAge * 1000 });
   const token = `${Buffer.from(content, "utf8").toString("base64url")}.${sign(content)}`;
-  response.cookies.set(cookieName, token, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge });
+  response.cookies.set(cookieName, token, { httpOnly: true, sameSite: "lax", secure: isProductionRuntime(), path: "/", maxAge });
   return response;
 }
 
 export function clearSessionCookie(response: NextResponse) {
-  response.cookies.set(cookieName, "", { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 0 });
+  response.cookies.set(cookieName, "", { httpOnly: true, sameSite: "lax", secure: isProductionRuntime(), path: "/", maxAge: 0 });
   return response;
 }

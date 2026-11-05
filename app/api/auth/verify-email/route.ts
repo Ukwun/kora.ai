@@ -3,10 +3,14 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { readDatabase, writeDatabase } from "@/lib/store";
 import { logAudit } from "@/lib/security";
+import { checkRequestRateLimit } from "@/lib/security";
 
 const schema = z.object({ token: z.string().regex(/^[a-f0-9]{64}$/) });
 
 export async function POST(request: Request) {
+  if (!(await checkRequestRateLimit(request, "auth:verify-email", 10, 15 * 60))) {
+    return NextResponse.json({ error: "Too many verification attempts. Try again later." }, { status: 429 });
+  }
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Verification link is invalid or expired." }, { status: 400 });
   const database = await readDatabase();

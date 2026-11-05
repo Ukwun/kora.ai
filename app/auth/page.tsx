@@ -90,6 +90,25 @@ function AuthForm() {
     }
   }
 
+  async function resendVerification() {
+    setBusy(true);
+    setStatus("");
+    try {
+      const response = await fetch("/api/auth/resend-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: form.email }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Unable to resend the verification email.");
+      setStatus(result.message);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Unable to resend the verification email.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#050509] px-5 py-10 text-white">
       <div className="w-full max-w-md">
@@ -173,9 +192,14 @@ function AuthForm() {
             </button>
           </form>
           {mode === "signin" && (
-            <Link href="/auth/reset" className="mt-4 inline-block text-sm text-violet-200 transition hover:text-white">
-              Forgot your password?
-            </Link>
+            <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2">
+              <Link href="/auth/reset" className="text-sm text-violet-200 transition hover:text-white">
+                Forgot your password?
+              </Link>
+              <button type="button" disabled={busy || !form.email} onClick={resendVerification} className="text-sm text-violet-200 transition hover:text-white disabled:opacity-50">
+                Resend verification email
+              </button>
+            </div>
           )}
           {enabledProviders.length > 0 && (
             <>

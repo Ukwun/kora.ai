@@ -7,7 +7,27 @@ if (!connectionString) {
   throw new Error("DATABASE_URL is required to run migrations");
 }
 
-const pool = new pg.Pool({ connectionString, ssl: process.env.DATABASE_SSL === "false" ? false : { rejectUnauthorized: false } });
+const production = process.env.NODE_ENV === "production" || process.env.NETLIFY === "true";
+if (production && process.env.DATABASE_SSL === "false") {
+  throw new Error("DATABASE_SSL=false is not allowed in production.");
+}
+const poolMax = Number(process.env.DATABASE_POOL_MAX ?? (production ? 1 : 10));
+if (!Number.isInteger(poolMax) || poolMax < 1 || (production && poolMax > 5)) {
+  throw new Error("DATABASE_POOL_MAX must be a positive integer and no greater than 5 in production.");
+}
+const databaseUrl = new URL(connectionString);
+for (const key of ["sslmode", "sslrootcert", "sslcert", "sslkey", "sslpassword"]) {
+  databaseUrl.searchParams.delete(key);
+}
+const ca = process.env.DATABASE_CA_CERT?.replace(/\\n/g, "\n");
+const pool = new pg.Pool({
+  connectionString: databaseUrl.toString(),
+  ssl: process.env.DATABASE_SSL === "false" ? false : ca ? { rejectUnauthorized: true, ca } : { rejectUnauthorized: true },
+  max: poolMax,
+  connectionTimeoutMillis: 10_000,
+  idleTimeoutMillis: 20_000,
+  allowExitOnIdle: true,
+});
 const migrationDirectory = new URL("../migrations/", import.meta.url);
 const migrations = (await readdir(migrationDirectory)).filter((file) => file.endsWith(".sql")).sort();
 await pool.query(`CREATE TABLE IF NOT EXISTS schema_migrations (

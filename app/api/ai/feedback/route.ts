@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/session";
 import { recordFeedback, getFeedbackStats } from "@/lib/ai-feedback";
 import {
-  checkRateLimit,
+  checkDistributedRateLimit,
   getClientIP,
   logAudit,
   canAccessOrganization,
@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
 
     // Rate limiting
     const rateLimitKey = `feedback_${session.id}`;
-    if (!checkRateLimit(rateLimitKey, 50, 60)) {
+    if (!(await checkDistributedRateLimit(rateLimitKey, 50, 60))) {
       await logAudit({
         userId: session.id,
         organizationId: session.organizationId,

@@ -12,6 +12,7 @@
     "lint": "eslint",
     "type-check": "tsc --noEmit",
     "db:migrate": "node scripts/migrate.mjs",
+    "email:verify": "node scripts/verify-email.mjs",
     "test:e2e": "node scripts/e2e-smoke.mjs",
     "test:load": "node scripts/load-test.mjs"
   },

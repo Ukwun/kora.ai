@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import bcrypt from "bcryptjs";
 import type { BusinessProfile } from "./business-profile";
 import { postgresEnabled, query, withTransaction } from "./db";
+import { isProductionRuntime } from "./database-config";
 import { recordStructuredEntityMemory } from "./business-memory-records";
 import type { BusinessMemoryRecord, MemoryAuditEvent } from "./business-memory-records";
 
@@ -193,7 +194,7 @@ const dataDir = path.join(process.cwd(), "data");
 const dbPath = path.join(dataDir, "app-db.json");
 
 function assertProductionDatabase() {
-  if (process.env.NODE_ENV === "production" && !process.env.DATABASE_URL) {
+  if (isProductionRuntime() && !process.env.DATABASE_URL) {
     throw new Error("DATABASE_URL is required in production; refusing to use file storage");
   }
 }

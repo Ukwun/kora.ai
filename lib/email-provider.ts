@@ -12,6 +12,7 @@ export async function sendTransactionalEmail(input: SendEmailInput) {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({ from, to: input.to, subject: input.subject, html: input.html, text: input.text }),
+    signal: AbortSignal.timeout(10_000),
   });
   const result = await response.json().catch(() => ({})) as { id?: string; message?: string };
   if (!response.ok || !result.id) throw new Error(result.message || "Transactional email delivery failed.");
