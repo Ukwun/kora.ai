@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { leadPackageIds, leadPackages } from "@/lib/lead-service-packages";
 import KoraModel from "./KoraModel";
 
 const features = [
@@ -56,37 +57,13 @@ type FeatureId = (typeof features)[number]["id"];
 const leadMarkets = ["Africa", "UK & Europe", "China & Japan", "US & Canada", "Australia"] as const;
 const leadChannels = ["Email delivery", "Email strategy", "Cold DM strategy", "WhatsApp", "Campaign ads"] as const;
 
-const leadTiers = [
-  {
-    id: "tier-1",
-    name: "Tier 1",
-    price: "₦15,000",
-    volume: "25 leads / month",
-    description: "A focused starting list of prospective customers for your business.",
-    includes: ["Names and professional titles", "Email addresses and phone numbers", "Prospect list prepared for your business email"],
-  },
-  {
-    id: "tier-2",
-    name: "Tier 2",
-    price: "₦75,000",
-    volume: "50 leads / month",
-    description: "More context plus a one-day campaign built to start conversations.",
-    includes: ["Emails, phone numbers, company names and websites", "One-day audience-targeted ad campaign", "Prospective customers directed to your WhatsApp DMs after connection and consent"],
-  },
-  {
-    id: "tier-3",
-    name: "Tier 3",
-    price: "₦120,000",
-    volume: "Up to 100 leads / month",
-    description: "A richer professional audience with tailored email copy and a longer campaign.",
-    includes: [
-      "Professional emails, phone numbers, LinkedIn URLs and business social handles where lawfully available",
-      "Company names and websites, plus professional employee and employer names",
-      "Personalized first-touch and follow-up email copy for each lead",
-      "Three-day audience-targeted ad campaign",
-    ],
-  },
-] as const;
+const leadPackageCards = leadPackageIds.map((id) => ({
+  ...leadPackages[id],
+  id,
+  name: leadPackages[id].label,
+  price: `₦${leadPackages[id].priceNGN.toLocaleString("en-NG")}`,
+  volume: `${leadPackages[id].prospects} researched prospects`,
+}));
 
 export default function HomeExperience() {
   const [activeFeature, setActiveFeature] = useState<FeatureId>("people");
@@ -421,20 +398,20 @@ export default function HomeExperience() {
         <div className="kora-growth-pricing" aria-labelledby="growth-pricing-title">
           <div className="kora-growth-pricing-heading">
             <div>
-              <span className="kora-growth-kicker">LEAD SERVICE · MONTHLY TIERS</span>
-              <h3 id="growth-pricing-title">Choose a starting point for your next customers.</h3>
+              <span className="kora-growth-kicker">LEAD SERVICE · ONE-TIME PACKAGES</span>
+              <h3 id="growth-pricing-title">Choose a researched prospect package.</h3>
             </div>
-            <p>Reach professional audiences around the world. Plan delivery to your business email or a messaging destination, subject to availability, consent and supported connections.</p>
+            <p>Proposed Nigerian launch prices for test and review—not established market rates. Availability, sourcing, targeting and final terms must be approved before an order is accepted.</p>
           </div>
           <div className="kora-growth-tier-grid">
-            {leadTiers.map((tier) => (
-              <article className={`kora-growth-tier-card${tier.id === "tier-3" ? " is-featured" : ""}`} key={tier.id}>
+            {leadPackageCards.map((tier) => (
+              <article className={`kora-growth-tier-card${tier.id === "growth" ? " is-featured" : ""}`} key={tier.id}>
                 <div className="kora-growth-tier-topline">
                   <span>{tier.name}</span>
-                  {tier.id !== "tier-1" && <span className="kora-growth-tier-badge">{tier.id === "tier-3" ? "3-DAY CAMPAIGN" : "CAMPAIGN INCLUDED"}</span>}
+                  {tier.id === "growth" && <span className="kora-growth-tier-badge">RECOMMENDED</span>}
                 </div>
                 <p className="kora-growth-tier-volume">{tier.volume}</p>
-                <p className="kora-growth-tier-price">{tier.price}<span> / month</span></p>
+                <p className="kora-growth-tier-price">{tier.price}<span> one-time</span></p>
                 <p className="kora-growth-tier-description">{tier.description}</p>
                 <ul>
                   {tier.includes.map((item) => <li key={item}><span aria-hidden="true">✓</span>{item}</li>)}
@@ -445,11 +422,29 @@ export default function HomeExperience() {
               </article>
             ))}
           </div>
-          <p className="kora-growth-tier-note">Lead profile details are subject to verified, lawful sources and regional review. Prices describe the proposed monthly plans; creating a workspace or requesting a review does not charge you or start lead delivery.</p>
+          <p className="kora-growth-tier-note">Decision-maker details and business email are provided where available; missing or unverified fields are disclosed. A valid prospect must match the agreed criteria and have a traceable source and usable contact route. Duplicates, invalid records, and material criteria failures are covered by a replacement policy confirmed in the final offer. Complex markets, specialist industries, and hard-to-source decision-makers may require a custom quote.</p>
+          <div className="mt-8 border-t border-white/10 pt-6">
+            <div className="mb-4">
+              <span className="kora-growth-kicker">MARKETING SERVICES · SOLD SEPARATELY</span>
+              <h4 className="mt-2 text-lg font-medium text-slate-100">Campaign support is not bundled into prospect packages.</h4>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {[
+                ["Campaign strategy and audience definition", "₦35,000"],
+                ["Campaign setup and creative direction", "₦75,000"],
+                ["Monthly campaign management", "₦150,000–₦250,000"],
+                ["Advertising budget", "Paid separately by customer"],
+              ].map(([service, price]) => <article key={service} className="rounded-xl border border-white/10 bg-black/20 p-4">
+                <h5 className="text-sm font-medium text-slate-200">{service}</h5>
+                <p className="mt-2 text-sm text-violet-200">{price}</p>
+              </article>)}
+            </div>
+            <p className="mt-3 text-xs leading-5 text-slate-500">Marketing prices are proposed test prices. Deliverables, campaign count, reporting frequency and revisions must be agreed before purchase. Advertising spend is separate from management fees.</p>
+          </div>
         </div>
 
         <div className="kora-growth-footer">
-          <p><strong>Responsible by design.</strong> Today, Kora can save a lead-service request for availability and compliance review; it does not yet source or deliver contacts or launch campaigns. Any future fulfilment requires verified sources, appropriate consent, regional review, your approval, and supported provider connections.</p>
+          <p><strong>Responsible by design.</strong> Today, Kora can save a package and targeting-brief request for availability and compliance review; it does not yet source or deliver prospects, process package payments, or launch campaigns. The proposed 48-hour fulfilment period starts only after payment is confirmed and the customer has submitted an approved, complete targeting brief.</p>
           <div className="kora-growth-actions">
             <Link className="kora-button" href="/auth?mode=signup">Set up a workspace to request a review <span aria-hidden="true">↗</span></Link>
             <a className="kora-text-link" href="#how-it-works">See how Kora works <span aria-hidden="true">↓</span></a>

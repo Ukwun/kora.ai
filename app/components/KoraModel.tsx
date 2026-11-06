@@ -22,7 +22,6 @@ type BodyNode = { node: ModelNode; factor: number; baseX: number; baseZ: number 
 type ModelViewerElement = HTMLElement & {
   model?: object | null;
   autoplay: boolean;
-  pause: () => void;
   [key: symbol]: ModelScene | undefined;
 };
 
@@ -99,6 +98,7 @@ export default function KoraModel({ blinking, expression, priority = false, came
   const lastPointerAtRef = useRef(0);
   const blinkingRef = useRef(blinking);
   const expressionRef = useRef(expression);
+  const initialOpenAtRef = useRef(0);
 
   useEffect(() => {
     blinkingRef.current = blinking;
@@ -265,7 +265,10 @@ export default function KoraModel({ blinking, expression, priority = false, came
       headNodesRef.current = headNodes;
       bodyNodesRef.current = bodyNodes;
       faceNodesRef.current = faceNodes;
-      setPoseReady(false);
+      initialOpenAtRef.current = Date.now();
+      applyModelPose(headNodes, bodyNodes, faceNodes, gazeRef.current, false, expressionRef.current, true, 0);
+      scene.queueRender();
+      setPoseReady(true);
       setModelLoaded(true);
       setFailed(false);
     };
@@ -300,23 +303,6 @@ export default function KoraModel({ blinking, expression, priority = false, came
   }, [ready, visible, retryNonce, modelLoaded, failed]);
 
   useEffect(() => {
-    if (!modelLoaded || poseReady) return;
-    const element = containerRef.current?.querySelector("[data-kora-model]") as ModelViewerElement | null;
-    if (!element) return;
-    const settleTimer = window.setTimeout(() => {
-      element.pause();
-      element.autoplay = false;
-      headNodesRef.current.forEach(({ node, ...head }) => {
-        if (!node.rotation) return;
-        head.baseX = node.rotation.x;
-        head.baseY = node.rotation.y;
-      });
-      setPoseReady(true);
-    }, reducedMotion ? 150 : 900);
-    return () => window.clearTimeout(settleTimer);
-  }, [modelLoaded, poseReady, reducedMotion]);
-
-  useEffect(() => {
     if (!ready || !modelLoaded || !poseReady || !inView || reducedMotion) return;
     const element = containerRef.current?.querySelector("[data-kora-model]") as ModelViewerElement | null;
     const scene = element ? getModelScene(element) : undefined;
@@ -336,7 +322,7 @@ export default function KoraModel({ blinking, expression, priority = false, came
         bodyNodesRef.current,
         faceNodesRef.current,
         gazeRef.current,
-        blinkingRef.current,
+        blinkingRef.current && Date.now() - initialOpenAtRef.current >= 1000,
         expressionRef.current,
         false,
         timestamp,
@@ -353,7 +339,7 @@ export default function KoraModel({ blinking, expression, priority = false, came
   useEffect(() => {
     if (!ready || !modelLoaded || !poseReady || !inView || !reducedMotion) return;
     gazeRef.current = gazeTargetRef.current;
-    applyModelPose(headNodesRef.current, bodyNodesRef.current, faceNodesRef.current, gazeRef.current, blinking, expression, true, 0);
+    applyModelPose(headNodesRef.current, bodyNodesRef.current, faceNodesRef.current, gazeRef.current, blinking && Date.now() - initialOpenAtRef.current >= 1000, expression, true, 0);
     const element = containerRef.current?.querySelector("[data-kora-model]") as ModelViewerElement | null;
     if (element) getModelScene(element)?.queueRender();
   }, [ready, reducedMotion, modelLoaded, poseReady, inView, blinking, expression]);
@@ -374,7 +360,7 @@ export default function KoraModel({ blinking, expression, priority = false, came
     alt: "Kora's animated 3D face and upper body",
     reveal: "auto",
     loading: "eager",
-    autoplay: true,
+    autoplay: false,
     "animation-name": "Armaturecorpo.001|Armaturecorpo.001|Armature|mixamo.com|Layer0",
     // Preserve the established hero framing; interaction changes must not move Kora.
     "camera-target": "39m 93m -2m",
@@ -387,18 +373,18 @@ export default function KoraModel({ blinking, expression, priority = false, came
     exposure: "1.05",
     "environment-image": "neutral",
     "tone-mapping": "neutral",
-    style: { position: "absolute", inset: 0, display: "block", width: "100%", height: "100%", background: "transparent" },
+    style: { position: "absolute", inset: 0, display: "block", width: "100%", height: "100%", background: "transparent", opacity: poseReady ? 1 : 0, transition: reducedMotion ? "none" : "opacity 240ms ease" },
   }) : null;
 
-  return <div ref={containerRef} className="relative h-full w-full" aria-busy={!modelLoaded && !failed}>
+  return <div ref={containerRef} className="relative h-full w-full" aria-busy={!poseReady && !failed}>
     {model}
     <div
-      className={`absolute inset-0 transition-opacity duration-500 ${modelLoaded ? "pointer-events-none opacity-0" : "opacity-100"}`}
-      aria-hidden={modelLoaded}
+      className={`absolute inset-0 transition-opacity duration-500 ${poseReady ? "pointer-events-none opacity-0" : "opacity-100"}`}
+      aria-hidden={poseReady}
     >
       <div className="kora-model-loading" />
     </div>
-    {visible && !modelLoaded && !failed && (
+    {visible && !poseReady && !failed && (
       <div className="pointer-events-none absolute inset-x-0 bottom-5 flex justify-center text-violet-100/70">
         <span className="text-[10px] uppercase tracking-[0.18em]">Loading Kora 3D</span>
       </div>

@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
+import { leadPackageIds, leadPackages } from "@/lib/lead-service-packages";
 
 type LeadRequest = {
   id: string;
   title: string;
   createdAt: string;
-  data: { packageLabel?: string; fulfillmentStatus?: string; paymentStatus?: string; requestedMonthlyVolume?: number; targeting?: { country?: string; region?: string } };
+  data: { packageLabel?: string; fulfillmentStatus?: string; paymentStatus?: string; requestedVolume?: number; targeting?: { country?: string; region?: string } };
 };
 
 type IntegrationState = { connected: boolean; requestedAt: string | null; capability: string; oauthConfigured?: boolean; message: string };
@@ -35,7 +36,6 @@ export function GrowthAndConnections({ canManage }: { canManage: boolean }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [confirmed, setConfirmed] = useState(false);
-  const [acceptsSubscriptionTerms, setAcceptsSubscriptionTerms] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -110,18 +110,6 @@ export function GrowthAndConnections({ canManage }: { canManage: boolean }) {
     } catch (cause) { setError(cause instanceof Error ? cause.message : "WhatsApp connection is not configured."); setBusy(false); }
   }
 
-  async function requestSubscription(plan: "tier-1" | "tier-2" | "tier-3") {
-    if (!canManage || !acceptsSubscriptionTerms) return;
-    setBusy(true); setError(""); setNotice("");
-    try {
-      const response = await fetch("/api/lead-service/subscription", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ plan, acceptsTerms: acceptsSubscriptionTerms }) });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? "The subscription request could not be saved.");
-      setNotice(result.message ?? "Subscription request saved.");
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "The subscription request could not be saved."); }
-    finally { setBusy(false); }
-  }
-
   return <section className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.025]">
     <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 px-5 py-5 sm:px-6">
       <div><p className="text-xs uppercase tracking-[0.18em] text-violet-300">Growth and connections</p><h2 className="mt-2 text-xl font-semibold">Bring the next opportunity into view</h2><p className="mt-1 text-sm text-slate-400">Request a targeted lead-service review or check your business messaging connection.</p></div>
@@ -135,9 +123,9 @@ export function GrowthAndConnections({ canManage }: { canManage: boolean }) {
       {notice && <p role="status" className="mb-4 rounded-xl border border-emerald-300/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">{notice}</p>}
       {tab === "leads" ? <div className="grid gap-6 xl:grid-cols-[1fr_0.8fr]">
         <form onSubmit={(event) => void requestLeadReview(event)} className="space-y-4">
-          <div><h3 className="font-medium">Describe the audience you want to reach</h3><p className="mt-1 text-sm text-slate-400">A team member will need to review availability, lawful sourcing, delivery and pricing before anything is offered.</p></div>
+          <div><h3 className="font-medium">Build your prospect brief</h3><p className="mt-1 text-sm text-slate-400">Choose a one-time prospect package and describe the audience. A team member must approve the complete brief and confirm availability before fulfilment.</p></div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <label className="text-sm text-slate-300">Review option<select name="package" defaultValue="tier-1" className={fieldClass}><option value="tier-1">Tier 1 · up to 25 leads monthly · ₦15,000</option><option value="tier-2">Tier 2 · up to 50 leads monthly · ₦75,000</option><option value="tier-3">Tier 3 · up to 100 leads monthly · ₦120,000</option></select></label>
+            <label className="text-sm text-slate-300">Prospect package<select name="package" defaultValue="starter" className={fieldClass}>{leadPackageIds.map((id) => { const offer = leadPackages[id]; return <option key={id} value={id}>{offer.label} · {offer.prospects} prospects · ₦{offer.priceNGN.toLocaleString("en-NG")}</option>; })}</select></label>
             <label className="text-sm text-slate-300">Country<input name="country" required minLength={2} maxLength={80} placeholder="For example, Ghana" className={fieldClass} /></label>
             <label className="text-sm text-slate-300">State, region or city<input name="region" maxLength={100} placeholder="Optional" className={fieldClass} /></label>
             <label className="text-sm text-slate-300">Company size<select name="companySize" defaultValue="any" className={fieldClass}><option value="any">Any size</option><option value="1-10">1–10 people</option><option value="11-50">11–50 people</option><option value="51-200">51–200 people</option><option value="201+">201+ people</option></select></label>
@@ -147,17 +135,28 @@ export function GrowthAndConnections({ canManage }: { canManage: boolean }) {
             <label className="text-sm text-slate-300"> <input name="ageMax" type="number" min="18" max="100" placeholder="Maximum age" className={fieldClass} /></label>
             <label className="text-sm text-slate-300 sm:col-span-2">Relevant professional interests<input name="interests" placeholder="For example, inventory management, online sales" className={fieldClass} /></label>
           </div>
-          <label className="flex items-start gap-3 text-xs leading-5 text-slate-400"><input name="acceptsReviewTerms" type="checkbox" required className="mt-1 accent-violet-400" /><span>I understand this only requests a review. Kora does not currently source or deliver leads through this form, and there is no charge or active subscription. Any future offer must explain its source, price, terms and opt-out process before I agree.</span></label>
-          <button type="submit" disabled={!canManage || busy} className={buttonClass}>{busy ? "Saving request…" : canManage ? "Request availability review" : "Ask a workspace owner to request a review"}</button>
+          <label className="flex items-start gap-3 text-xs leading-5 text-slate-400"><input name="acceptsReviewTerms" type="checkbox" required className="mt-1 accent-violet-400" /><span>I understand this records an availability review only. These are proposed test prices; no payment is taken and Kora does not currently source or deliver prospects. A final written offer must confirm price, lawful source, contact verification, replacement terms and the approved brief before fulfilment.</span></label>
+          <button type="submit" disabled={!canManage || busy} className={buttonClass}>{busy ? "Saving request…" : canManage ? "Request package review" : "Ask a workspace owner to request a review"}</button>
           <p className="text-xs leading-5 text-slate-500">We do not support targeting based on sensitive personal traits such as health, religion, race or political views. Only adult professional audiences are eligible for review.</p>
-          <label className="flex items-start gap-3 text-xs leading-5 text-slate-400"><input type="checkbox" checked={acceptsSubscriptionTerms} onChange={(event) => setAcceptsSubscriptionTerms(event.target.checked)} className="mt-1 accent-violet-400" /><span>I understand this records a subscription request only. No payment, lead delivery, or campaign begins until pricing, lawful sourcing, providers and checkout are approved.</span></label>
-          <div className="grid gap-2 sm:grid-cols-2"><button type="button" disabled={!canManage || busy || !acceptsSubscriptionTerms} onClick={() => void requestSubscription("tier-1")} className={buttonClass}>Request Tier 1 · ₦15,000 / month</button><button type="button" disabled={!canManage || busy || !acceptsSubscriptionTerms} onClick={() => void requestSubscription("tier-2")} className={buttonClass}>Request Tier 2 · ₦75,000 / month</button></div>
-          <button type="button" disabled={!canManage || busy || !acceptsSubscriptionTerms} onClick={() => void requestSubscription("tier-3")} className={`${buttonClass} w-full`}>Request Tier 3 · ₦120,000 / month</button>
+          <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-xs leading-5 text-slate-400">
+            <p><strong className="text-slate-200">48-hour fulfilment window:</strong> starts only after payment is confirmed and your complete targeting brief is approved. Decision-maker details and business email are provided where available; missing or unverified fields are disclosed.</p>
+            <p className="mt-2">A valid prospect must match the agreed criteria and have a traceable source plus a usable contact route. Duplicates, invalid records, and material criteria failures are covered by a replacement policy confirmed in the final offer. Complex or specialist targeting may require a custom quote.</p>
+          </div>
+          <div className="rounded-xl border border-violet-300/10 bg-violet-500/[0.04] p-4">
+            <h4 className="text-sm font-medium text-slate-200">Marketing services are separate</h4>
+            <ul className="mt-2 space-y-1 text-xs leading-5 text-slate-400">
+              <li>Campaign strategy and audience definition: ₦35,000</li>
+              <li>Campaign setup and creative direction: ₦75,000</li>
+              <li>Monthly campaign management: ₦150,000–₦250,000</li>
+              <li>Advertising budget is paid separately by the customer.</li>
+            </ul>
+            <p className="mt-2 text-xs leading-5 text-slate-500">These are proposed test prices. Deliverables, campaign count, reporting frequency and revisions must be agreed separately.</p>
+          </div>
         </form>
         <aside className="rounded-xl border border-white/10 bg-black/20 p-4 sm:p-5">
           <h3 className="font-medium">Your review requests</h3>
-          <p className="mt-1 text-sm leading-5 text-slate-400">A saved request is not a subscription. Nothing is charged or delivered while supplier, pricing and checkout arrangements are unavailable.</p>
-          {requests.length ? <ul className="mt-4 space-y-3">{requests.map((item) => <li key={item.id} className="rounded-lg border border-white/10 px-3 py-3"><p className="text-sm font-medium">{item.data.packageLabel ?? item.title}</p><p className="mt-1 text-xs text-slate-400">{item.data.targeting?.country}{item.data.targeting?.region ? ` · ${item.data.targeting.region}` : ""} · up to {item.data.requestedMonthlyVolume} requested monthly</p><p className="mt-2 text-xs text-amber-200">Availability review needed · no payment or delivery started</p></li>)}</ul> : <p className="mt-4 rounded-lg border border-dashed border-white/10 p-4 text-sm text-slate-500">No review requests yet.</p>}
+          <p className="mt-1 text-sm leading-5 text-slate-400">A saved package review is not an order or subscription. No payment or delivery starts until service availability and a final offer are confirmed.</p>
+          {requests.length ? <ul className="mt-4 space-y-3">{requests.map((item) => <li key={item.id} className="rounded-lg border border-white/10 px-3 py-3"><p className="text-sm font-medium">{item.data.packageLabel ?? item.title}</p><p className="mt-1 text-xs text-slate-400">{item.data.targeting?.country}{item.data.targeting?.region ? ` · ${item.data.targeting.region}` : ""} · {item.data.requestedVolume ?? "Custom"} prospects</p><p className="mt-2 text-xs text-amber-200">{item.data.fulfillmentStatus === "brief_approved" ? "Brief and availability approved · final offer and payment still pending" : item.data.fulfillmentStatus === "custom_quote_required" ? "Custom quote required · no payment or delivery started" : item.data.fulfillmentStatus === "unavailable" ? "Not available · no payment or delivery started" : "Availability review pending · no payment or delivery started"}</p></li>)}</ul> : <p className="mt-4 rounded-lg border border-dashed border-white/10 p-4 text-sm text-slate-500">No package reviews yet.</p>}
         </aside>
       </div> : <div className="grid gap-5 md:grid-cols-[1fr_0.8fr]">
         <div><div className="flex items-center gap-3"><span aria-hidden="true" className={`h-2.5 w-2.5 rounded-full ${whatsapp?.connected ? "bg-emerald-400" : "bg-amber-300"}`} /><h3 className="font-medium">WhatsApp Business</h3><span className="rounded-full border border-amber-300/20 px-2.5 py-1 text-xs text-amber-100">{whatsapp?.connected ? "Connected" : whatsapp?.requestedAt ? "Request recorded" : "Not connected"}</span></div>

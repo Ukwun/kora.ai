@@ -25,7 +25,16 @@ const createSchema = z.object({
   deliveryStatus: z.enum(["queued", "sent"]).default("queued"),
 });
 
-const updateSchema = z.object({ id: z.string().min(1), deliveryStatus: z.enum(["queued", "sent", "rejected", "replaced"]), note: z.string().trim().max(500).optional() });
+const updateSchema = z.object({
+  id: z.string().min(1),
+  deliveryStatus: z.enum(["queued", "sent", "rejected", "replaced"]).optional(),
+  reviewDecision: z.enum(["approve_brief", "custom_quote", "unavailable"]).optional(),
+  note: z.string().trim().max(500).optional(),
+}).refine((value) => Boolean(value.deliveryStatus) !== Boolean(value.reviewDecision), {
+  message: "Choose exactly one lead-delivery update or package-review decision.",
+}).refine((value) => value.reviewDecision !== "custom_quote" || Boolean(value.note?.trim()), {
+  message: "A custom-quote review needs a note for the customer.",
+});
 
 function canFulfill(session: { email: string; role: string; id: string; organizationId: string }) {
   const configuredAdmin = process.env.LEAD_ADMIN_EMAIL?.trim().toLowerCase();
@@ -85,6 +94,39 @@ export async function PATCH(request: NextRequest) {
   const parsed = updateSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid lead delivery update." }, { status: 400 });
   const records = await listBusinessMemoryRecords(session.organizationId, 500);
+  if (parsed.data.reviewDecision) {
+    const current = records.find((record) => record.id === parsed.data.id && record.entityType === "lead_request");
+    if (!current) return NextResponse.json({ error: "Package review request not found." }, { status: 404 });
+    if (current.data.fulfillmentStatus !== "availability_review_required") {
+      return NextResponse.json({ error: "This package review has already been actioned." }, { status: 409 });
+    }
+    const reviewedAt = new Date().toISOString();
+    const reviewDetails = parsed.data.reviewDecision === "approve_brief"
+      ? { fulfillmentStatus: "brief_approved", availabilityStatus: "confirmed", availabilityConfirmedAt: reviewedAt, targetingBriefApprovedAt: reviewedAt }
+      : parsed.data.reviewDecision === "custom_quote"
+        ? { fulfillmentStatus: "custom_quote_required", availabilityStatus: "custom_quote_required", customQuoteRequired: true }
+        : { fulfillmentStatus: "unavailable", availabilityStatus: "unavailable" };
+    const updated = await updateBusinessMemoryRecord(session.organizationId, current.id, session.id, {
+      status: parsed.data.reviewDecision === "unavailable" ? "unavailable" : "reviewed",
+      data: { ...current.data, ...reviewDetails, reviewNote: parsed.data.note, reviewedAt, reviewedBy: session.email },
+    });
+    const statusMessage = parsed.data.reviewDecision === "approve_brief"
+      ? "Your targeting brief and package availability were approved. A final offer and payment are still required before fulfilment."
+      : parsed.data.reviewDecision === "custom_quote"
+        ? "Your targeting request needs a custom quote. No payment or fulfilment has started."
+        : "Your requested package is not currently available. No payment or fulfilment has started.";
+    await notifyOrganization({
+      organizationId: session.organizationId,
+      actorUserId: session.id,
+      userIds: [current.createdBy],
+      event: "leadUpdate",
+      title: "Lead package review updated",
+      body: statusMessage,
+      data: { requestId: current.id, fulfillmentStatus: reviewDetails.fulfillmentStatus },
+    });
+    return NextResponse.json({ success: true, data: updated });
+  }
+  if (!parsed.data.deliveryStatus) return NextResponse.json({ error: "A delivery status is required." }, { status: 400 });
   const current = records.find((record) => record.id === parsed.data.id && record.entityType === "lead_delivery");
   if (!current) return NextResponse.json({ error: "Lead delivery record not found." }, { status: 404 });
   const updated = await updateBusinessMemoryRecord(session.organizationId, current.id, session.id, { status: parsed.data.deliveryStatus, data: { ...current.data, deliveryStatus: parsed.data.deliveryStatus, adminNote: parsed.data.note, updatedAt: new Date().toISOString() } });

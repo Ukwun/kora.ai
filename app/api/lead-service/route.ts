@@ -3,9 +3,10 @@ import { z } from "zod";
 import { createBusinessMemoryRecord, listBusinessMemoryRecords } from "@/lib/business-memory-records";
 import { getSessionFromRequest } from "@/lib/session";
 import { canPerformAction } from "@/lib/security";
+import { leadPackageIds, leadPackages } from "@/lib/lead-service-packages";
 
 const schema = z.object({
-  package: z.enum(["tier-1", "tier-2", "tier-3"]),
+  package: z.enum(leadPackageIds),
   country: z.string().trim().min(2).max(80),
   region: z.string().trim().max(100).optional(),
   jobTitles: z.array(z.string().trim().min(2).max(80)).min(1).max(10),
@@ -24,12 +25,6 @@ const schema = z.object({
 }, {
   message: "Targeting based on sensitive personal traits is not supported.",
 });
-
-const packageDetails = {
-  "tier-1": { label: "Tier 1", requestedMonthlyVolume: 25 },
-  "tier-2": { label: "Tier 2", requestedMonthlyVolume: 50 },
-  "tier-3": { label: "Tier 3", requestedMonthlyVolume: 100 },
-} as const;
 
 export async function GET(request: NextRequest) {
   const session = await getSessionFromRequest(request);
@@ -50,26 +45,36 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: "Review the audience details and confirm the service terms before submitting." }, { status: 400 });
 
   const { package: packageId, acceptsReviewTerms, ...targeting } = parsed.data;
-  const selectedPackage = packageDetails[packageId];
+  const selectedPackage = leadPackages[packageId];
   const record = await createBusinessMemoryRecord({
     organizationId: session.organizationId,
     createdBy: session.id,
     entityType: "lead_request",
-    title: `${selectedPackage.label} lead-service review`,
-    summary: `Review requested for a ${targeting.country}${targeting.region ? `, ${targeting.region}` : ""} audience. This is a request only; no leads, subscription, or payment have been created.`,
+    title: `${selectedPackage.label} package review`,
+    summary: `Review requested for ${selectedPackage.prospects} prospects in a ${targeting.country}${targeting.region ? `, ${targeting.region}` : ""} audience. This is a request only; no leads or payment have been created.`,
     data: {
       package: packageId,
       packageLabel: selectedPackage.label,
-      requestedMonthlyVolume: selectedPackage.requestedMonthlyVolume,
+      requestedVolume: selectedPackage.prospects,
+      proposedPriceNGN: selectedPackage.priceNGN,
+      proposedPriceIsTestPrice: true,
+      currency: "NGN",
+      includedFeatures: selectedPackage.includes,
       targeting,
+      orderType: "one_time_package_review",
       fulfillmentStatus: "availability_review_required",
       paymentStatus: "not_started",
+      fulfillmentWindowStartsWhen: "Payment is confirmed and the customer has submitted an approved, complete targeting brief.",
+      contactAvailabilityDisclosure: "Personal decision-maker details and business email are provided where available; missing or unverified fields are disclosed.",
+      validLeadCriteria: "A real, relevant organisation or prospect matching the agreed criteria, with a traceable source and usable contact route.",
+      replacementPolicy: "Duplicates, invalid records, and records that materially fail the agreed criteria are eligible for replacement under the final agreed policy.",
+      customQuoteRequiredForComplexTargeting: true,
       termsAcceptedAt: acceptsReviewTerms ? new Date().toISOString() : undefined,
     },
-    status: "active",
+    status: "review_pending",
     source: "user_confirmed",
     verificationStatus: "user_confirmed",
-    tags: ["lead-service", "review-request"],
+    tags: ["lead-service", "package-review", packageId],
   });
   return NextResponse.json({ success: true, data: record }, { status: 201 });
 }
