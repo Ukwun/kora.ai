@@ -81,7 +81,7 @@ function applyModelPose(
   }
 }
 
-export default function KoraModel({ gaze, blinking, expression, priority = false, cameraOrbit = "0deg 75deg 20%" }: { gaze: { x: number; y: number }; blinking: boolean; expression: Expression; priority?: boolean; cameraOrbit?: string }) {
+export default function KoraModel({ blinking, expression, priority = false, cameraOrbit = "0deg 75deg 20%" }: { blinking: boolean; expression: Expression; priority?: boolean; cameraOrbit?: string }) {
   const [ready, setReady] = useState(false);
   const [modelLoaded, setModelLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -94,15 +94,16 @@ export default function KoraModel({ gaze, blinking, expression, priority = false
   const headNodesRef = useRef<{ node: ModelNode; factor: number; baseX: number; baseY: number }[]>([]);
   const bodyNodesRef = useRef<BodyNode[]>([]);
   const faceNodesRef = useRef<ModelNode[]>([]);
-  const gazeRef = useRef(gaze);
+  const gazeRef = useRef({ x: 0, y: 0 });
+  const gazeTargetRef = useRef({ x: 0, y: 0 });
+  const lastPointerAtRef = useRef(0);
   const blinkingRef = useRef(blinking);
   const expressionRef = useRef(expression);
 
   useEffect(() => {
-    gazeRef.current = gaze;
     blinkingRef.current = blinking;
     expressionRef.current = expression;
-  }, [gaze, blinking, expression]);
+  }, [blinking, expression]);
 
   useEffect(() => {
     const observer = new IntersectionObserver(([entry]) => {
@@ -178,6 +179,52 @@ export default function KoraModel({ gaze, blinking, expression, priority = false
 
   useEffect(() => {
     if (!visible) return;
+    lastPointerAtRef.current = Date.now();
+
+    const handlePointerMove = (event: globalThis.PointerEvent) => {
+      if (event.pointerType === "touch") return;
+      const bounds = containerRef.current?.getBoundingClientRect();
+      if (!bounds) return;
+      const nextGaze = {
+        x: Math.max(-13, Math.min(13, ((event.clientX - bounds.left) / Math.max(bounds.width, 1) - 0.5) * 26)),
+        y: Math.max(-10, Math.min(10, ((event.clientY - bounds.top) / Math.max(bounds.height, 1) - 0.5) * 20)),
+      };
+      gazeTargetRef.current = nextGaze;
+      lastPointerAtRef.current = Date.now();
+
+      if (reducedMotion) {
+        gazeRef.current = nextGaze;
+        if (modelLoaded && inView) {
+          applyModelPose(
+            headNodesRef.current,
+            bodyNodesRef.current,
+            faceNodesRef.current,
+            nextGaze,
+            blinkingRef.current,
+            expressionRef.current,
+            true,
+            0,
+          );
+          const element = containerRef.current?.querySelector("[data-kora-model]") as ModelViewerElement | null;
+          if (element) getModelScene(element)?.queueRender();
+        }
+      }
+    };
+    const idleMotion = window.setInterval(() => {
+      if (reducedMotion || Date.now() - lastPointerAtRef.current < 3500) return;
+      const time = Date.now() / 1100;
+      gazeTargetRef.current = { x: Math.sin(time) * 3.2, y: Math.cos(time * 0.8) * 2.2 };
+    }, 1200);
+
+    window.addEventListener("pointermove", handlePointerMove, { passive: true });
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.clearInterval(idleMotion);
+    };
+  }, [visible, reducedMotion, modelLoaded, inView]);
+
+  useEffect(() => {
+    if (!visible) return;
     const element = containerRef.current?.querySelector("[data-kora-model]") as ModelViewerElement | null;
     if (!element) return;
     let initialized = false;
@@ -185,8 +232,6 @@ export default function KoraModel({ gaze, blinking, expression, priority = false
       if (initialized) return;
       const scene = getModelScene(element);
       if (!scene) return;
-      initialized = true;
-
       const headNodes: { node: ModelNode; factor: number; baseX: number; baseY: number }[] = [];
       const bodyNodes: BodyNode[] = [];
       const faceNodes: ModelNode[] = [];
@@ -214,6 +259,9 @@ export default function KoraModel({ gaze, blinking, expression, priority = false
         if (object.morphTargetDictionary && object.morphTargetInfluences) faceNodes.push(object);
       });
 
+      // model-viewer can expose its scene before the glTF nodes are populated.
+      if (headNodes.length === 0) return;
+      initialized = true;
       headNodesRef.current = headNodes;
       bodyNodesRef.current = bodyNodes;
       faceNodesRef.current = faceNodes;
@@ -274,7 +322,15 @@ export default function KoraModel({ gaze, blinking, expression, priority = false
     const scene = element ? getModelScene(element) : undefined;
     if (!scene) return;
     let frame = 0;
+    let previousTimestamp = 0;
     const animateFace = (timestamp: number) => {
+      const elapsed = previousTimestamp ? timestamp - previousTimestamp : 16.67;
+      previousTimestamp = timestamp;
+      const blend = 1 - Math.exp(-elapsed / 90);
+      gazeRef.current = {
+        x: gazeRef.current.x + (gazeTargetRef.current.x - gazeRef.current.x) * blend,
+        y: gazeRef.current.y + (gazeTargetRef.current.y - gazeRef.current.y) * blend,
+      };
       applyModelPose(
         headNodesRef.current,
         bodyNodesRef.current,
@@ -296,10 +352,11 @@ export default function KoraModel({ gaze, blinking, expression, priority = false
 
   useEffect(() => {
     if (!ready || !modelLoaded || !poseReady || !inView || !reducedMotion) return;
-    applyModelPose(headNodesRef.current, bodyNodesRef.current, faceNodesRef.current, gaze, blinking, expression, true, 0);
+    gazeRef.current = gazeTargetRef.current;
+    applyModelPose(headNodesRef.current, bodyNodesRef.current, faceNodesRef.current, gazeRef.current, blinking, expression, true, 0);
     const element = containerRef.current?.querySelector("[data-kora-model]") as ModelViewerElement | null;
     if (element) getModelScene(element)?.queueRender();
-  }, [ready, reducedMotion, modelLoaded, poseReady, inView, gaze, blinking, expression]);
+  }, [ready, reducedMotion, modelLoaded, poseReady, inView, blinking, expression]);
 
   const retryModel = () => {
     setFailed(false);

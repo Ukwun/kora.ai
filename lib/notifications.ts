@@ -40,7 +40,13 @@ function escapeHtml(value: string) {
 }
 
 function recipientsFor(database: Awaited<ReturnType<typeof readDatabase>>, organizationId: string, userIds?: string[]) {
-  return database.users.filter((user) => user.organizationId === organizationId && user.accountStatus === "active" && (!userIds || userIds.includes(user.id)));
+  const activeMemberIds = new Set(
+    database.memberships
+      .filter((membership) => membership.organizationId === organizationId && membership.status === "active")
+      .map((membership) => membership.userId)
+      .filter((userId): userId is string => Boolean(userId)),
+  );
+  return database.users.filter((user) => activeMemberIds.has(user.id) && user.accountStatus === "active" && (!userIds || userIds.includes(user.id)));
 }
 
 export async function notifyOrganization(input: {

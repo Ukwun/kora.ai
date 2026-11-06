@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, type PointerEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import KoraModel from "./KoraModel";
 
 const features = [
@@ -55,23 +55,6 @@ const features = [
 type FeatureId = (typeof features)[number]["id"];
 const leadMarkets = ["Africa", "UK & Europe", "China & Japan", "US & Canada", "Australia"] as const;
 const leadChannels = ["Email delivery", "Email strategy", "Cold DM strategy", "WhatsApp", "Campaign ads"] as const;
-const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
-
-function gazeForPointer(clientX: number, clientY: number, frame?: HTMLElement | null) {
-  const gazeFrame = frame ?? document.querySelector<HTMLElement>(".kora-hero-visual .kora-face-frame");
-  if (!gazeFrame) {
-    return {
-      x: clamp((clientX / Math.max(window.innerWidth, 1) - 0.5) * 26, -13, 13),
-      y: clamp((clientY / Math.max(window.innerHeight, 1) - 0.5) * 20, -10, 10),
-    };
-  }
-
-  const bounds = gazeFrame.getBoundingClientRect();
-  return {
-    x: clamp(((clientX - bounds.left) / Math.max(bounds.width, 1) - 0.5) * 26, -13, 13),
-    y: clamp(((clientY - bounds.top) / Math.max(bounds.height, 1) - 0.5) * 20, -10, 10),
-  };
-}
 
 const leadTiers = [
   {
@@ -110,9 +93,7 @@ export default function HomeExperience() {
   const [ambientExpression, setAmbientExpression] = useState<FeatureId>("people");
   const [selectedMarket, setSelectedMarket] = useState<(typeof leadMarkets)[number]>("Africa");
   const [selectedChannels, setSelectedChannels] = useState<(typeof leadChannels)[number][]>(["Email strategy"]);
-  const [gaze, setGaze] = useState({ x: 0, y: 0 });
   const [blinking, setBlinking] = useState(false);
-  const gazeTarget = useRef({ x: 0, y: 0 });
   const lastPointerAt = useRef(0);
   const active = features.find((feature) => feature.id === activeFeature) ?? features[0];
 
@@ -141,35 +122,7 @@ export default function HomeExperience() {
   }, []);
 
   useEffect(() => {
-    let animationFrame = 0;
-    let disposed = false;
-    let lastUpdate = 0;
-
-    const animateGaze = (timestamp: number) => {
-      if (disposed) return;
-      if (timestamp - lastUpdate >= 1000 / 30) {
-        lastUpdate = timestamp;
-        setGaze((current) => {
-          const next = {
-            x: current.x + (gazeTarget.current.x - current.x) * 0.3,
-            y: current.y + (gazeTarget.current.y - current.y) * 0.3,
-          };
-          return Math.abs(next.x - current.x) < 0.005 && Math.abs(next.y - current.y) < 0.005 ? gazeTarget.current : next;
-        });
-      }
-      animationFrame = window.requestAnimationFrame(animateGaze);
-    };
-
-    animationFrame = window.requestAnimationFrame(animateGaze);
-    return () => {
-      disposed = true;
-      window.cancelAnimationFrame(animationFrame);
-    };
-  }, []);
-
-  useEffect(() => {
-    const updateFromViewport = (clientX: number, clientY: number) => {
-      gazeTarget.current = gazeForPointer(clientX, clientY);
+    const updateFromViewport = (clientX: number) => {
       lastPointerAt.current = Date.now();
       const expressionIndex = Math.min(
         Math.floor((clientX / Math.max(window.innerWidth, 1)) * features.length),
@@ -178,12 +131,10 @@ export default function HomeExperience() {
       setAmbientExpression(features[expressionIndex].id);
     };
     const handlePointerMove = (event: globalThis.PointerEvent) => {
-      if (event.pointerType !== "touch") updateFromViewport(event.clientX, event.clientY);
+      if (event.pointerType !== "touch") updateFromViewport(event.clientX);
     };
     const idleMotion = window.setInterval(() => {
       if (Date.now() - lastPointerAt.current < 3500) return;
-      const time = Date.now() / 1100;
-      gazeTarget.current = { x: Math.sin(time) * 3.2, y: Math.cos(time * 0.8) * 2.2 };
       setAmbientExpression(features[Math.floor(Date.now() / 5200) % features.length].id);
     }, 1200);
 
@@ -215,17 +166,6 @@ export default function HomeExperience() {
     sections.forEach((section) => observer.observe(section));
     return () => observer.disconnect();
   }, []);
-
-  function followPointer(event: PointerEvent<HTMLDivElement>) {
-    if (event.pointerType === "touch") return;
-    gazeTarget.current = gazeForPointer(event.clientX, event.clientY, event.currentTarget);
-    lastPointerAt.current = Date.now();
-    const expressionIndex = Math.min(
-      Math.floor((event.clientX / Math.max(window.innerWidth, 1)) * features.length),
-      features.length - 1,
-    );
-    setAmbientExpression(features[expressionIndex].id);
-  }
 
   function toggleLeadChannel(channel: (typeof leadChannels)[number]) {
     setSelectedChannels((current) =>
@@ -288,10 +228,9 @@ export default function HomeExperience() {
           <div className="kora-orbit kora-orbit-two" />
           <div className="kora-orbit-point kora-orbit-point-one" />
           <div className="kora-orbit-point kora-orbit-point-two" />
-          <div className="kora-face-frame" data-mode={activeFeature} onPointerMove={followPointer}>
+          <div className="kora-face-frame" data-mode={activeFeature}>
             <div className="kora-face-halo" />
             <KoraModel
-              gaze={gaze}
               blinking={blinking}
               expression={ambientExpression}
               priority
@@ -341,13 +280,8 @@ export default function HomeExperience() {
           <p className="kora-eyebrow">A BUSINESS HAS MANY SIGNALS</p>
           <h2 id="capabilities-title">Kora brings them into focus.</h2>
           <p>Not another dashboard of disconnected numbers. A workspace-aware view of the people and activity behind the business.</p>
-          <div
-            className="kora-face-frame kora-story-face-frame"
-            data-mode={activeFeature}
-            onPointerMove={followPointer}
-          >
+          <div className="kora-face-frame kora-story-face-frame" data-mode={activeFeature}>
             <KoraModel
-              gaze={gaze}
               blinking={blinking}
               expression={ambientExpression}
               cameraOrbit="0deg 75deg 14%"

@@ -32,6 +32,14 @@ if (process.env.E2E_FORBIDDEN_PATH && (!forbiddenEmail || !forbiddenPassword)) {
 }
 
 await request("/api/health");
+const unauthenticatedSessionResponse = await fetch(`${baseUrl}/api/auth/session`, { redirect: "manual" });
+if (unauthenticatedSessionResponse.status !== 401 || !unauthenticatedSessionResponse.headers.get("content-type")?.includes("application/json")) {
+  throw new Error("Unauthenticated session checks must return a JSON 401 response.");
+}
+const unauthenticatedSession = await unauthenticatedSessionResponse.json();
+if (unauthenticatedSession.authenticated !== false) {
+  throw new Error("Unauthenticated session checks must report authenticated=false.");
+}
 if (process.env.E2E_TEST_EMAIL && process.env.E2E_TEST_PASSWORD) {
   await request("/api/auth/signin", { method: "POST", body: JSON.stringify({ email, password }) });
 } else {

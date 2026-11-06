@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionClaimsFromRequest } from "@/lib/session-token";
 import { checkDistributedRateLimit, getClientIP } from "@/lib/rate-limit";
 
-const protectedPaths = ["/dashboard", "/api/auth/session"];
+const protectedPaths = ["/dashboard"];
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
