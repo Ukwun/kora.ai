@@ -60,6 +60,8 @@ export async function POST(request: NextRequest) {
       proposedPriceIsTestPrice: true,
       currency: "NGN",
       includedFeatures: selectedPackage.includes,
+      campaign: selectedPackage.campaign ?? null,
+      advertisingSpendIncluded: false,
       targeting,
       orderType: "one_time_package_review",
       fulfillmentStatus: "availability_review_required",

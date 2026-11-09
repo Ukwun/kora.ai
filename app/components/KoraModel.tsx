@@ -33,6 +33,12 @@ function getModelScene(element: ModelViewerElement) {
   return sceneSymbol ? element[sceneSymbol] : undefined;
 }
 
+function updatePupilGaze(container: HTMLDivElement | null, gaze: { x: number; y: number }) {
+  if (!container) return;
+  container.style.setProperty("--kora-pupil-x", `${gaze.x * 0.28}px`);
+  container.style.setProperty("--kora-pupil-y", `${gaze.y * 0.28}px`);
+}
+
 function applyModelPose(
   headNodes: HeadNode[],
   bodyNodes: BodyNode[],
@@ -44,23 +50,24 @@ function applyModelPose(
   timestamp: number,
 ) {
   const expressions = {
-    people: { smile: 0.85, mouth: 0.02, eyes: 1 },
-    work: { smile: 0.03, mouth: 0.88, eyes: 0.76 },
-    money: { smile: 0.55, mouth: 0.58, eyes: 0.88 },
-    signals: { smile: 0.02, mouth: 0.72, eyes: 1 },
-    team: { smile: 1, mouth: 0.08, eyes: 0.94 },
+    people: { smile: 0.85, mouth: 0.02 },
+    work: { smile: 0.03, mouth: 0.88 },
+    money: { smile: 0.55, mouth: 0.58 },
+    signals: { smile: 0.02, mouth: 0.72 },
+    team: { smile: 1, mouth: 0.08 },
   } as const;
   const face = expressions[expression];
   const setMorph = (node: ModelNode, target: string, value: number) => {
     const index = node.morphTargetDictionary?.[target];
     const influences = node.morphTargetInfluences;
     if (typeof index === "number" && influences) {
-      influences[index] += (Math.max(0, Math.min(1, value)) - influences[index]) * (reducedMotion ? 1 : 0.22);
+      const blend = reducedMotion ? 1 : blinking ? 0.72 : 0.38;
+      influences[index] += (Math.max(0, Math.min(1, value)) - influences[index]) * blend;
     }
   };
   faceNodes.forEach((node) => {
-    setMorph(node, "eyeopenr", blinking ? 0 : face.eyes);
-    setMorph(node, "eyeopenel", blinking ? 0 : face.eyes);
+    setMorph(node, "eyeopenr", blinking ? 0 : 1);
+    setMorph(node, "eyeopenel", blinking ? 0 : 1);
     setMorph(node, "smilel", face.smile);
     setMorph(node, "smiler", face.smile);
     setMorph(node, "mouthopen", face.mouth);
@@ -88,6 +95,7 @@ export default function KoraModel({ blinking, expression, priority = false, came
   const [inView, setInView] = useState(priority);
   const [reducedMotion, setReducedMotion] = useState(false);
   const [poseReady, setPoseReady] = useState(false);
+  const [blinkReady, setBlinkReady] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const headNodesRef = useRef<{ node: ModelNode; factor: number; baseX: number; baseY: number }[]>([]);
@@ -99,11 +107,18 @@ export default function KoraModel({ blinking, expression, priority = false, came
   const blinkingRef = useRef(blinking);
   const expressionRef = useRef(expression);
   const initialOpenAtRef = useRef(0);
+  const canBlink = (requested: boolean) => requested && Date.now() - initialOpenAtRef.current >= 2000;
 
   useEffect(() => {
     blinkingRef.current = blinking;
     expressionRef.current = expression;
   }, [blinking, expression]);
+
+  useEffect(() => {
+    if (!modelLoaded) return;
+    const timer = window.setTimeout(() => setBlinkReady(true), 2000);
+    return () => window.clearTimeout(timer);
+  }, [modelLoaded]);
 
   useEffect(() => {
     const observer = new IntersectionObserver(([entry]) => {
@@ -191,6 +206,7 @@ export default function KoraModel({ blinking, expression, priority = false, came
       };
       gazeTargetRef.current = nextGaze;
       lastPointerAtRef.current = Date.now();
+      updatePupilGaze(containerRef.current, nextGaze);
 
       if (reducedMotion) {
         gazeRef.current = nextGaze;
@@ -200,7 +216,7 @@ export default function KoraModel({ blinking, expression, priority = false, came
             bodyNodesRef.current,
             faceNodesRef.current,
             nextGaze,
-            blinkingRef.current,
+            canBlink(blinkingRef.current),
             expressionRef.current,
             true,
             0,
@@ -266,6 +282,7 @@ export default function KoraModel({ blinking, expression, priority = false, came
       bodyNodesRef.current = bodyNodes;
       faceNodesRef.current = faceNodes;
       initialOpenAtRef.current = Date.now();
+      setBlinkReady(false);
       applyModelPose(headNodes, bodyNodes, faceNodes, gazeRef.current, false, expressionRef.current, true, 0);
       scene.queueRender();
       setPoseReady(true);
@@ -317,12 +334,13 @@ export default function KoraModel({ blinking, expression, priority = false, came
         x: gazeRef.current.x + (gazeTargetRef.current.x - gazeRef.current.x) * blend,
         y: gazeRef.current.y + (gazeTargetRef.current.y - gazeRef.current.y) * blend,
       };
+      updatePupilGaze(containerRef.current, gazeRef.current);
       applyModelPose(
         headNodesRef.current,
         bodyNodesRef.current,
         faceNodesRef.current,
         gazeRef.current,
-        blinkingRef.current && Date.now() - initialOpenAtRef.current >= 1000,
+        canBlink(blinkingRef.current),
         expressionRef.current,
         false,
         timestamp,
@@ -339,7 +357,7 @@ export default function KoraModel({ blinking, expression, priority = false, came
   useEffect(() => {
     if (!ready || !modelLoaded || !poseReady || !inView || !reducedMotion) return;
     gazeRef.current = gazeTargetRef.current;
-    applyModelPose(headNodesRef.current, bodyNodesRef.current, faceNodesRef.current, gazeRef.current, blinking && Date.now() - initialOpenAtRef.current >= 1000, expression, true, 0);
+    applyModelPose(headNodesRef.current, bodyNodesRef.current, faceNodesRef.current, gazeRef.current, canBlink(blinking), expression, true, 0);
     const element = containerRef.current?.querySelector("[data-kora-model]") as ModelViewerElement | null;
     if (element) getModelScene(element)?.queueRender();
   }, [ready, reducedMotion, modelLoaded, poseReady, inView, blinking, expression]);
@@ -348,11 +366,13 @@ export default function KoraModel({ blinking, expression, priority = false, came
     setFailed(false);
     setModelLoaded(false);
     setPoseReady(false);
+    setBlinkReady(false);
     headNodesRef.current = [];
     bodyNodesRef.current = [];
     faceNodesRef.current = [];
     setRetryNonce((value) => value + 1);
   };
+  const eyesClosed = blinking && blinkReady;
   const model = ready && visible && !failed ? createElement("model-viewer", {
     "data-kora-model": "true",
     key: `kora-model-${retryNonce}`,
@@ -376,8 +396,26 @@ export default function KoraModel({ blinking, expression, priority = false, came
     style: { position: "absolute", inset: 0, display: "block", width: "100%", height: "100%", background: "transparent", opacity: poseReady ? 1 : 0, transition: reducedMotion ? "none" : "opacity 240ms ease" },
   }) : null;
 
-  return <div ref={containerRef} className="relative h-full w-full" aria-busy={!poseReady && !failed}>
+  return <div
+    ref={containerRef}
+    className="relative h-full w-full"
+    aria-busy={!poseReady && !failed}
+    data-kora-blinking={eyesClosed ? "true" : "false"}
+    data-kora-framing={cameraOrbit.includes("14%") ? "story" : "hero"}
+  >
     {model}
+    {poseReady && (
+      <div className="kora-eye-overlay" aria-hidden="true">
+        <span className="kora-eye-overlay-eye">
+          <span className="kora-eye-overlay-iris"><span /></span>
+          <span className="kora-eye-overlay-lid" />
+        </span>
+        <span className="kora-eye-overlay-eye">
+          <span className="kora-eye-overlay-iris"><span /></span>
+          <span className="kora-eye-overlay-lid" />
+        </span>
+      </div>
+    )}
     <div
       className={`absolute inset-0 transition-opacity duration-500 ${poseReady ? "pointer-events-none opacity-0" : "opacity-100"}`}
       aria-hidden={poseReady}

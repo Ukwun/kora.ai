@@ -20,6 +20,7 @@
 
 # production
 /build
+/data/app-db.json.*.tmp
 
 # misc
 .DS_Store

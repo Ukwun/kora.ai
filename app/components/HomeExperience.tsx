@@ -86,8 +86,8 @@ export default function HomeExperience() {
         resetTimer = window.setTimeout(() => {
           setBlinking(false);
           scheduleBlink();
-        }, 145);
-      }, 2300 + Math.random() * 3000);
+        }, 110);
+      }, 4000 + Math.random() * 4000);
     };
 
     scheduleBlink();
@@ -305,7 +305,7 @@ export default function HomeExperience() {
         <div className="kora-growth-heading">
           <p className="kora-eyebrow"><span className="kora-live-dot" /> GROW WITH THE RIGHT PEOPLE</p>
           <h2 id="growth-title">Find your next customers—<span>wherever they are.</span></h2>
-          <p>Define the companies, roles, and markets that fit your business. Request a reviewed audience across Africa, Europe, Asia-Pacific, and the Americas—subject to verified local data sources and market rules.</p>
+          <p>Define the companies, roles, and markets that fit your business. Target audiences across Africa, Europe, Asia-Pacific, the Americas, and other international markets. The regions below are examples; availability and lawful sourcing are reviewed for each country.</p>
         </div>
 
         <div className="kora-growth-panel">
@@ -401,7 +401,7 @@ export default function HomeExperience() {
               <span className="kora-growth-kicker">LEAD SERVICE · ONE-TIME PACKAGES</span>
               <h3 id="growth-pricing-title">Choose a researched prospect package.</h3>
             </div>
-            <p>Proposed Nigerian launch prices for test and review—not established market rates. Availability, sourcing, targeting and final terms must be approved before an order is accepted.</p>
+            <p>Prices are shown in Nigerian naira as proposed test prices. Every package can target international markets; country availability, lawful sourcing, currency and final terms are confirmed during review.</p>
           </div>
           <div className="kora-growth-tier-grid">
             {leadPackageCards.map((tier) => (
@@ -416,6 +416,20 @@ export default function HomeExperience() {
                 <ul>
                   {tier.includes.map((item) => <li key={item}><span aria-hidden="true">✓</span>{item}</li>)}
                 </ul>
+                {tier.campaign && (
+                  <div className="mt-5 rounded-xl border border-violet-300/15 bg-violet-500/[0.06] p-4">
+                    <p className="kora-growth-kicker">INCLUDED CAMPAIGN ADVERT</p>
+                    <h4 className="mt-2 text-sm font-semibold text-slate-100">{tier.campaign.title}</h4>
+                    <p className="mt-2 text-xs leading-5 text-slate-400">{tier.campaign.summary}</p>
+                    <ul className="mt-3 space-y-2">
+                      {tier.campaign.deliverables.map((item) => (
+                        <li key={item} className="flex items-start gap-2 text-xs leading-5 text-slate-300">
+                          <span aria-hidden="true" className="mt-0.5 text-violet-300">✓</span>{item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 <Link className="kora-growth-tier-action" href="/auth?mode=signup">
                   Create a workspace <span aria-hidden="true">↗</span>
                 </Link>
@@ -424,27 +438,12 @@ export default function HomeExperience() {
           </div>
           <p className="kora-growth-tier-note">Decision-maker details and business email are provided where available; missing or unverified fields are disclosed. A valid prospect must match the agreed criteria and have a traceable source and usable contact route. Duplicates, invalid records, and material criteria failures are covered by a replacement policy confirmed in the final offer. Complex markets, specialist industries, and hard-to-source decision-makers may require a custom quote.</p>
           <div className="mt-8 border-t border-white/10 pt-6">
-            <div className="mb-4">
-              <span className="kora-growth-kicker">MARKETING SERVICES · SOLD SEPARATELY</span>
-              <h4 className="mt-2 text-lg font-medium text-slate-100">Campaign support is not bundled into prospect packages.</h4>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {[
-                ["Campaign strategy and audience definition", "₦35,000"],
-                ["Campaign setup and creative direction", "₦75,000"],
-                ["Monthly campaign management", "₦150,000–₦250,000"],
-                ["Advertising budget", "Paid separately by customer"],
-              ].map(([service, price]) => <article key={service} className="rounded-xl border border-white/10 bg-black/20 p-4">
-                <h5 className="text-sm font-medium text-slate-200">{service}</h5>
-                <p className="mt-2 text-sm text-violet-200">{price}</p>
-              </article>)}
-            </div>
-            <p className="mt-3 text-xs leading-5 text-slate-500">Marketing prices are proposed test prices. Deliverables, campaign count, reporting frequency and revisions must be agreed before purchase. Advertising spend is separate from management fees.</p>
+            <h4 className="text-lg font-medium text-slate-100">Campaign setup, budget and international reach</h4>
+            <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-400">Growth includes a one-day campaign advert, Scale includes three days, and Enterprise includes seven days. The campaign brief and ad copy are tailored to your approved audience, offer and call to action. Advertising spend is separate from the package price; the platform, budget and launch schedule are confirmed with you before any advert runs. International targeting is available subject to country-specific sourcing, platform eligibility and compliance review.</p>
           </div>
         </div>
 
         <div className="kora-growth-footer">
-          <p><strong>Responsible by design.</strong> Today, Kora can save a package and targeting-brief request for availability and compliance review; it does not yet source or deliver prospects, process package payments, or launch campaigns. The proposed 48-hour fulfilment period starts only after payment is confirmed and the customer has submitted an approved, complete targeting brief.</p>
           <div className="kora-growth-actions">
             <Link className="kora-button" href="/auth?mode=signup">Set up a workspace to request a review <span aria-hidden="true">↗</span></Link>
             <a className="kora-text-link" href="#how-it-works">See how Kora works <span aria-hidden="true">↓</span></a>
