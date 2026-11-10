@@ -35,8 +35,8 @@ function getModelScene(element: ModelViewerElement) {
 
 function updatePupilGaze(container: HTMLDivElement | null, gaze: { x: number; y: number }) {
   if (!container) return;
-  container.style.setProperty("--kora-pupil-x", `${gaze.x * 0.28}px`);
-  container.style.setProperty("--kora-pupil-y", `${gaze.y * 0.28}px`);
+  container.style.setProperty("--kora-pupil-x", `${gaze.x * 0.14}px`);
+  container.style.setProperty("--kora-pupil-y", `${gaze.y * 0.14}px`);
 }
 
 function applyModelPose(
@@ -51,9 +51,9 @@ function applyModelPose(
 ) {
   const expressions = {
     people: { smile: 0.85, mouth: 0.02 },
-    work: { smile: 0.03, mouth: 0.88 },
-    money: { smile: 0.55, mouth: 0.58 },
-    signals: { smile: 0.02, mouth: 0.72 },
+    work: { smile: 0.03, mouth: 0.2 },
+    money: { smile: 0.55, mouth: 0.14 },
+    signals: { smile: 0.02, mouth: 0.16 },
     team: { smile: 1, mouth: 0.08 },
   } as const;
   const face = expressions[expression];
@@ -74,8 +74,8 @@ function applyModelPose(
   });
   headNodes.forEach(({ node, factor, baseX, baseY }) => {
     if (!node.rotation) return;
-    node.rotation.y = baseY + gaze.x * 0.04 * factor;
-    node.rotation.x = baseX + gaze.y * 0.025 * factor;
+    node.rotation.y = baseY + gaze.x * 0.002 * factor;
+    node.rotation.x = baseX + gaze.y * 0.0015 * factor;
   });
   if (!reducedMotion) {
     const breath = Math.sin(timestamp / 1500);
@@ -257,11 +257,12 @@ export default function KoraModel({ blinking, expression, priority = false, came
           object.visible = false;
         }
         if (object.rotation && (name.endsWith("head") || name.endsWith("neck"))) {
+          const isNeck = name.endsWith("neck");
           headNodes.push({
             node: object,
-            factor: name.endsWith("head") ? 1 : 0.55,
-            baseX: object.rotation.x,
-            baseY: object.rotation.y,
+            factor: isNeck ? 0.15 : 1,
+            baseX: isNeck ? 0 : object.rotation.x,
+            baseY: isNeck ? 0 : object.rotation.y,
           });
         }
         if (object.rotation && /spine\d*$/.test(name)) {
