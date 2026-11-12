@@ -986,11 +986,11 @@ button {
   top: 25.5%;
   left: 47.5%;
   display: flex;
-  width: 13.5%;
-  height: 4%;
+  width: 9%;
+  height: 2.8%;
   align-items: center;
   justify-content: space-between;
-  transform: translate(calc(-50% + var(--kora-eye-shift-x, 0px)), calc(-50% + var(--kora-eye-shift-y, 0px)));
+  transform: perspective(120px) translate(calc(-50% + var(--kora-eye-shift-x, 0px)), calc(-50% + var(--kora-eye-shift-y, 0px))) rotateY(var(--kora-eye-rotation-y, 0rad)) rotateX(var(--kora-eye-rotation-x, 0rad));
   pointer-events: none;
 }
 
@@ -1048,8 +1048,8 @@ button {
 [data-kora-framing="story"] .kora-eye-overlay {
   top: 28%;
   left: 47.5%;
-  width: 19%;
-  height: 4.5%;
+  width: 12%;
+  height: 3.5%;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -39,6 +39,8 @@ function updatePupilGaze(container: HTMLDivElement | null, gaze: { x: number; y:
   container.style.setProperty("--kora-pupil-y", `${gaze.y * 0.14}px`);
   container.style.setProperty("--kora-eye-shift-x", `${gaze.x * 0.42}px`);
   container.style.setProperty("--kora-eye-shift-y", `${gaze.y * 0.42}px`);
+  container.style.setProperty("--kora-eye-rotation-x", `${gaze.y * 0.012}rad`);
+  container.style.setProperty("--kora-eye-rotation-y", `${gaze.x * 0.018}rad`);
 }
 
 function applyModelPose(
