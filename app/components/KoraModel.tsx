@@ -68,8 +68,8 @@ function applyModelPose(
   });
   headNodes.forEach(({ node, factor, baseX, baseY }) => {
     if (!node.rotation) return;
-    node.rotation.y = baseY + gaze.x * 0.018 * factor;
-    node.rotation.x = baseX + gaze.y * 0.012 * factor;
+    node.rotation.y = baseY + gaze.x * 0.021 * factor;
+    node.rotation.x = baseX + gaze.y * 0.016 * factor;
   });
   if (!reducedMotion) {
     const breath = Math.sin(timestamp / 1500);
@@ -189,7 +189,7 @@ export default function KoraModel({ blinking, expression, priority = false, came
       if (!bounds) return;
       const nextGaze = {
         x: Math.max(-13, Math.min(13, ((event.clientX - bounds.left) / Math.max(bounds.width, 1) - 0.5) * 26)),
-        y: Math.max(-10, Math.min(10, ((event.clientY - bounds.top) / Math.max(bounds.height, 1) - 0.5) * 20)),
+        y: Math.max(-10, Math.min(10, ((event.clientY - bounds.top) / Math.max(bounds.height, 1) - 0.28) * 20)),
       };
       gazeTargetRef.current = nextGaze;
       lastPointerAtRef.current = Date.now();
@@ -315,7 +315,7 @@ export default function KoraModel({ blinking, expression, priority = false, came
     const animateFace = (timestamp: number) => {
       const elapsed = previousTimestamp ? timestamp - previousTimestamp : 16.67;
       previousTimestamp = timestamp;
-      const blend = 1 - Math.exp(-elapsed / 90);
+      const blend = 1 - Math.exp(-elapsed / 65);
       gazeRef.current = {
         x: gazeRef.current.x + (gazeTargetRef.current.x - gazeRef.current.x) * blend,
         y: gazeRef.current.y + (gazeTargetRef.current.y - gazeRef.current.y) * blend,
