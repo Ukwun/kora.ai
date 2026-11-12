@@ -68,8 +68,8 @@ function applyModelPose(
   });
   headNodes.forEach(({ node, factor, baseX, baseY }) => {
     if (!node.rotation) return;
-    node.rotation.y = baseY + gaze.x * 0.021 * factor;
-    node.rotation.x = baseX + gaze.y * 0.016 * factor;
+    node.rotation.y = baseY + gaze.x * 0.024 * factor;
+    node.rotation.x = baseX + gaze.y * 0.018 * factor;
   });
   if (!reducedMotion) {
     const breath = Math.sin(timestamp / 1500);
@@ -187,9 +187,11 @@ export default function KoraModel({ blinking, expression, priority = false, came
       if (event.pointerType === "touch") return;
       const bounds = containerRef.current?.getBoundingClientRect();
       if (!bounds) return;
+      const pointerX = (event.clientX - bounds.left) / Math.max(bounds.width, 1);
+      const pointerY = (event.clientY - bounds.top) / Math.max(bounds.height, 1);
       const nextGaze = {
-        x: Math.max(-13, Math.min(13, ((event.clientX - bounds.left) / Math.max(bounds.width, 1) - 0.5) * 26)),
-        y: Math.max(-10, Math.min(10, ((event.clientY - bounds.top) / Math.max(bounds.height, 1) - 0.28) * 20)),
+        x: Math.max(-13, Math.min(13, (pointerX - 0.5) * 58)),
+        y: Math.max(-10, Math.min(10, (pointerY - 0.28) * 70)),
       };
       gazeTargetRef.current = nextGaze;
       lastPointerAtRef.current = Date.now();
@@ -246,7 +248,7 @@ export default function KoraModel({ blinking, expression, priority = false, came
           const isNeck = name.endsWith("neck");
           headNodes.push({
             node: object,
-            factor: isNeck ? 0.8 : 0.6,
+            factor: isNeck ? 0.8 : 0.75,
             baseX: isNeck ? 0 : object.rotation.x,
             baseY: isNeck ? 0 : object.rotation.y,
           });
