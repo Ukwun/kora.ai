@@ -980,67 +980,6 @@ button {
   animation: kora-model-pulse 1.8s ease-in-out infinite alternate;
 }
 
-.kora-eye-hotspot {
-  display: grid;
-  width: 14px;
-  height: 9px;
-  place-items: center;
-  overflow: hidden;
-  border: 1px solid rgba(47, 34, 39, 0.65);
-  border-radius: 50% 50% 50% 50% / 62% 62% 42% 42%;
-  background: radial-gradient(ellipse at 50% 42%, #f6f1ef 0 42%, #dfd5d3 74%, #bca9a6 100%);
-  box-shadow: inset 0 0 1px rgba(20, 12, 18, 0.5);
-  pointer-events: none;
-}
-
-.kora-eye-hotspot-iris {
-  display: grid;
-  width: 58%;
-  height: 84%;
-  place-items: center;
-  border: 1px solid rgba(49, 26, 73, 0.82);
-  border-radius: 50%;
-  background: radial-gradient(circle at 34% 28%, #f0ddff 0 8%, #a777cf 20%, #633681 43%, #2d1939 76%, #17111e 100%);
-  box-shadow: 0 0 3px rgba(54, 25, 82, 0.78);
-  transform: translate(var(--kora-pupil-x, 0px), var(--kora-pupil-y, 0px));
-  transition: transform 110ms ease-out;
-}
-
-.kora-eye-hotspot-pupil {
-  width: 45%;
-  height: 54%;
-  border-radius: 50%;
-  background: #100d18;
-  box-shadow: 1px -1px 0 rgba(248, 239, 255, 0.75);
-}
-
-.kora-eye-hotspot-lid {
-  position: absolute;
-  inset: -1px 0 auto;
-  height: 100%;
-  border-radius: 50%;
-  background: linear-gradient(180deg, #c3b0a7, #a68e88);
-  box-shadow: inset 0 -1px 1px rgba(62, 42, 40, 0.55);
-  transform: scaleY(0);
-  transform-origin: center top;
-  transition: transform 45ms ease-in;
-}
-
-[data-kora-blinking="true"] .kora-eye-hotspot-lid {
-  transform: scaleY(1);
-}
-
-[data-kora-blinking="false"] .kora-eye-hotspot-lid {
-  transition-duration: 100ms;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .kora-eye-hotspot-iris,
-  .kora-eye-hotspot-lid {
-    transition: none;
-  }
-}
-
 @keyframes kora-model-pulse {
   to { opacity: 0.45; }
 }

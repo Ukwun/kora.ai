@@ -33,12 +33,6 @@ function getModelScene(element: ModelViewerElement) {
   return sceneSymbol ? element[sceneSymbol] : undefined;
 }
 
-function updatePupilGaze(container: HTMLDivElement | null, gaze: { x: number; y: number }) {
-  if (!container) return;
-  container.style.setProperty("--kora-pupil-x", `${gaze.x * 0.14}px`);
-  container.style.setProperty("--kora-pupil-y", `${gaze.y * 0.14}px`);
-}
-
 function applyModelPose(
   headNodes: HeadNode[],
   bodyNodes: BodyNode[],
@@ -95,7 +89,6 @@ export default function KoraModel({ blinking, expression, priority = false, came
   const [inView, setInView] = useState(priority);
   const [reducedMotion, setReducedMotion] = useState(false);
   const [poseReady, setPoseReady] = useState(false);
-  const [blinkReady, setBlinkReady] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const headNodesRef = useRef<{ node: ModelNode; factor: number; baseX: number; baseY: number }[]>([]);
@@ -113,12 +106,6 @@ export default function KoraModel({ blinking, expression, priority = false, came
     blinkingRef.current = blinking;
     expressionRef.current = expression;
   }, [blinking, expression]);
-
-  useEffect(() => {
-    if (!modelLoaded) return;
-    const timer = window.setTimeout(() => setBlinkReady(true), 2000);
-    return () => window.clearTimeout(timer);
-  }, [modelLoaded]);
 
   useEffect(() => {
     const observer = new IntersectionObserver(([entry]) => {
@@ -206,7 +193,6 @@ export default function KoraModel({ blinking, expression, priority = false, came
       };
       gazeTargetRef.current = nextGaze;
       lastPointerAtRef.current = Date.now();
-      updatePupilGaze(containerRef.current, nextGaze);
 
       if (reducedMotion) {
         gazeRef.current = nextGaze;
@@ -260,7 +246,7 @@ export default function KoraModel({ blinking, expression, priority = false, came
           const isNeck = name.endsWith("neck");
           headNodes.push({
             node: object,
-            factor: isNeck ? 0.25 : 1,
+            factor: isNeck ? 0.8 : 0.6,
             baseX: isNeck ? 0 : object.rotation.x,
             baseY: isNeck ? 0 : object.rotation.y,
           });
@@ -283,7 +269,6 @@ export default function KoraModel({ blinking, expression, priority = false, came
       bodyNodesRef.current = bodyNodes;
       faceNodesRef.current = faceNodes;
       initialOpenAtRef.current = Date.now();
-      setBlinkReady(false);
       applyModelPose(headNodes, bodyNodes, faceNodes, gazeRef.current, false, expressionRef.current, true, 0);
       scene.queueRender();
       setPoseReady(true);
@@ -335,7 +320,6 @@ export default function KoraModel({ blinking, expression, priority = false, came
         x: gazeRef.current.x + (gazeTargetRef.current.x - gazeRef.current.x) * blend,
         y: gazeRef.current.y + (gazeTargetRef.current.y - gazeRef.current.y) * blend,
       };
-      updatePupilGaze(containerRef.current, gazeRef.current);
       applyModelPose(
         headNodesRef.current,
         bodyNodesRef.current,
@@ -367,42 +351,11 @@ export default function KoraModel({ blinking, expression, priority = false, came
     setFailed(false);
     setModelLoaded(false);
     setPoseReady(false);
-    setBlinkReady(false);
     headNodesRef.current = [];
     bodyNodesRef.current = [];
     faceNodesRef.current = [];
     setRetryNonce((value) => value + 1);
   };
-  const eyesClosed = blinking && blinkReady;
-  // These hotspots are anchored to the eye sockets in the GLB model coordinates.
-  const eyeHotspots = [
-    createElement("div", {
-      key: "left",
-      slot: "hotspot-kora-eye-left",
-      "data-position": "38.03 103.02 4.48",
-      "data-normal": "0.063 0.135 0.989",
-      className: "kora-eye-hotspot",
-      "aria-hidden": "true",
-    },
-      createElement("span", { className: "kora-eye-hotspot-iris" },
-        createElement("span", { className: "kora-eye-hotspot-pupil" }),
-      ),
-      createElement("span", { className: "kora-eye-hotspot-lid" }),
-    ),
-    createElement("div", {
-      key: "right",
-      slot: "hotspot-kora-eye-right",
-      "data-position": "40.25 102.89 3.69",
-      "data-normal": "0.474 -0.129 0.871",
-      className: "kora-eye-hotspot",
-      "aria-hidden": "true",
-    },
-      createElement("span", { className: "kora-eye-hotspot-iris" },
-        createElement("span", { className: "kora-eye-hotspot-pupil" }),
-      ),
-      createElement("span", { className: "kora-eye-hotspot-lid" }),
-    ),
-  ];
   const model = ready && visible && !failed ? createElement("model-viewer", {
     "data-kora-model": "true",
     key: `kora-model-${retryNonce}`,
@@ -424,13 +377,12 @@ export default function KoraModel({ blinking, expression, priority = false, came
     "environment-image": "neutral",
     "tone-mapping": "neutral",
     style: { position: "absolute", inset: 0, display: "block", width: "100%", height: "100%", background: "transparent", opacity: poseReady ? 1 : 0, transition: reducedMotion ? "none" : "opacity 240ms ease" },
-  }, ...eyeHotspots) : null;
+  }) : null;
 
   return <div
     ref={containerRef}
     className="relative h-full w-full"
     aria-busy={!poseReady && !failed}
-    data-kora-blinking={eyesClosed ? "true" : "false"}
   >
     {model}
     <div
