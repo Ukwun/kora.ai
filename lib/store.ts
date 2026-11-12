@@ -193,6 +193,12 @@ export type AppDatabase = {
 const dataDir = path.join(process.cwd(), "data");
 const dbPath = path.join(dataDir, "app-db.json");
 
+async function replaceDevelopmentDatabase(data: AppDatabase) {
+  const temporaryPath = `${dbPath}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
+  await fs.writeFile(temporaryPath, JSON.stringify(data, null, 2), "utf-8");
+  await fs.rename(temporaryPath, dbPath);
+}
+
 function assertProductionDatabase() {
   if (isProductionRuntime() && !process.env.DATABASE_URL) {
     throw new Error("DATABASE_URL is required in production; refusing to use file storage");
@@ -282,7 +288,7 @@ export async function ensureDatabase() {
   try {
     await fs.access(dbPath);
   } catch {
-    await fs.writeFile(dbPath, JSON.stringify(defaultDatabase, null, 2), "utf-8");
+    await replaceDevelopmentDatabase(defaultDatabase);
   }
 }
 
@@ -323,7 +329,7 @@ export async function readDatabase(): Promise<AppDatabase> {
     if (!parsed.schemaVersion || parsed.schemaVersion < 1) await writeDatabase(database);
     return database;
   } catch {
-    await fs.writeFile(dbPath, JSON.stringify(defaultDatabase, null, 2), "utf-8");
+    await replaceDevelopmentDatabase(defaultDatabase);
     return defaultDatabase;
   }
 }
@@ -331,9 +337,7 @@ export async function readDatabase(): Promise<AppDatabase> {
 export async function writeDatabase(data: AppDatabase) {
   if (postgresEnabled) return writePostgresDatabase(data);
   await ensureDatabase();
-  const temporaryPath = `${dbPath}.${process.pid}.${Date.now()}.tmp`;
-  await fs.writeFile(temporaryPath, JSON.stringify(data, null, 2), "utf-8");
-  await fs.rename(temporaryPath, dbPath);
+  await replaceDevelopmentDatabase(data);
 }
 
 async function readPostgresDatabase(): Promise<AppDatabase> {
