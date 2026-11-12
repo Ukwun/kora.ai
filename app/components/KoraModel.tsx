@@ -37,6 +37,8 @@ function updatePupilGaze(container: HTMLDivElement | null, gaze: { x: number; y:
   if (!container) return;
   container.style.setProperty("--kora-pupil-x", `${gaze.x * 0.14}px`);
   container.style.setProperty("--kora-pupil-y", `${gaze.y * 0.14}px`);
+  container.style.setProperty("--kora-eye-shift-x", `${gaze.x * 0.42}px`);
+  container.style.setProperty("--kora-eye-shift-y", `${gaze.y * 0.42}px`);
 }
 
 function applyModelPose(
@@ -74,8 +76,8 @@ function applyModelPose(
   });
   headNodes.forEach(({ node, factor, baseX, baseY }) => {
     if (!node.rotation) return;
-    node.rotation.y = baseY + gaze.x * 0.002 * factor;
-    node.rotation.x = baseX + gaze.y * 0.0015 * factor;
+    node.rotation.y = baseY + gaze.x * 0.018 * factor;
+    node.rotation.x = baseX + gaze.y * 0.012 * factor;
   });
   if (!reducedMotion) {
     const breath = Math.sin(timestamp / 1500);
@@ -260,7 +262,7 @@ export default function KoraModel({ blinking, expression, priority = false, came
           const isNeck = name.endsWith("neck");
           headNodes.push({
             node: object,
-            factor: isNeck ? 0.15 : 1,
+            factor: isNeck ? 0.25 : 1,
             baseX: isNeck ? 0 : object.rotation.x,
             baseY: isNeck ? 0 : object.rotation.y,
           });
