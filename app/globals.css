@@ -980,38 +980,23 @@ button {
   animation: kora-model-pulse 1.8s ease-in-out infinite alternate;
 }
 
-.kora-eye-overlay {
-  position: absolute;
-  z-index: 2;
-  top: 28.5%;
-  left: 47.5%;
-  display: flex;
-  width: 9%;
-  height: 2.8%;
-  align-items: center;
-  justify-content: space-between;
-  transform: perspective(120px) translate(calc(-50% + var(--kora-eye-shift-x, 0px)), calc(-50% + var(--kora-eye-shift-y, 0px))) rotateY(var(--kora-eye-rotation-y, 0rad)) rotateX(var(--kora-eye-rotation-x, 0rad));
+.kora-eye-hotspot {
+  display: grid;
+  width: 14px;
+  height: 9px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(47, 34, 39, 0.65);
+  border-radius: 50% 50% 50% 50% / 62% 62% 42% 42%;
+  background: radial-gradient(ellipse at 50% 42%, #f6f1ef 0 42%, #dfd5d3 74%, #bca9a6 100%);
+  box-shadow: inset 0 0 1px rgba(20, 12, 18, 0.5);
   pointer-events: none;
 }
 
-.kora-eye-overlay-eye {
-  position: relative;
+.kora-eye-hotspot-iris {
   display: grid;
-  width: 42%;
-  height: 100%;
-  place-items: center;
-  overflow: hidden;
-  border: 1px solid rgba(47, 34, 39, 0.72);
-  border-radius: 50% 50% 50% 50% / 62% 62% 42% 42%;
-  background: radial-gradient(ellipse at 50% 42%, #fff 0 42%, #f0e8e7 72%, #bca9a6 100%);
-  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.95), 0 0 2px rgba(20, 12, 18, 0.38);
-  transition: height 110ms ease;
-}
-
-.kora-eye-overlay-iris {
-  display: grid;
-  width: 56%;
-  height: 76%;
+  width: 58%;
+  height: 84%;
   place-items: center;
   border: 1px solid rgba(49, 26, 73, 0.82);
   border-radius: 50%;
@@ -1021,7 +1006,7 @@ button {
   transition: transform 110ms ease-out;
 }
 
-.kora-eye-overlay-iris > span {
+.kora-eye-hotspot-pupil {
   width: 45%;
   height: 54%;
   border-radius: 50%;
@@ -1029,7 +1014,7 @@ button {
   box-shadow: 1px -1px 0 rgba(248, 239, 255, 0.75);
 }
 
-.kora-eye-overlay-lid {
+.kora-eye-hotspot-lid {
   position: absolute;
   inset: -1px 0 auto;
   height: 100%;
@@ -1041,25 +1026,17 @@ button {
   transition: transform 45ms ease-in;
 }
 
-[data-kora-blinking="true"] .kora-eye-overlay-lid {
+[data-kora-blinking="true"] .kora-eye-hotspot-lid {
   transform: scaleY(1);
 }
 
-[data-kora-blinking="false"] .kora-eye-overlay-lid {
+[data-kora-blinking="false"] .kora-eye-hotspot-lid {
   transition-duration: 100ms;
 }
 
-[data-kora-framing="story"] .kora-eye-overlay {
-  top: 28%;
-  left: 47.5%;
-  width: 12%;
-  height: 3.5%;
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .kora-eye-overlay-eye,
-  .kora-eye-overlay-iris,
-  .kora-eye-overlay-lid {
+  .kora-eye-hotspot-iris,
+  .kora-eye-hotspot-lid {
     transition: none;
   }
 }
